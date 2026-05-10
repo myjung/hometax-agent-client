@@ -1,0 +1,87 @@
+name: release
+
+# tag push (예: v0.1.0a1, v0.1.0) 시 sdist + wheel 빌드 → PyPI 게시.
+#
+# PyPI 측은 Trusted Publisher (OIDC) 로 인증 — 토큰 불필요.
+# 사전 등록: https://pypi.org/manage/account/publishing/
+#   - Project name:  hometax-agent-client
+#   - Owner:         myjung
+#   - Repository:    hometax-agent-client
+#   - Workflow:      release.yml
+#   - Environment:   (사용자가 등록한 값과 아래 publish job 의 environment: 가
+#                    일치해야 함. 등록 안 했으면 publish job 의 environment
+#                    줄을 제거.)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Verify dist
+        run: |
+          ls -la dist/
+          uv tool run --from twine twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  test:
+    name: Run unit tests (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync (test extras)
+        run: uv sync --extra test
+
+      - name: Pytest (offline regression only)
+        run: uv run pytest -q
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    # PyPI Trusted Publisher 등록 시 'pypi' environment 를 함께 등록했다면
+    # 다음 줄 유지. 등록 안 했으면 environment 줄 제거.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hometax-agent-client
+    permissions:
+      id-token: write   # OIDC for Trusted Publisher
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

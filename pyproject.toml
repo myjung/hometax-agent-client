@@ -1,22 +1,26 @@
 [project]
 name = "hometax-agent-client"
-version = "0.1.0"
-description = "Capture-and-replay HomeTax HTTP client designed for AI agents and developers."
+version = "0.1.0a1"
+description = "Capture-and-replay HomeTax HTTP client designed for AI agents and developers (unofficial)."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
 authors = [
     { name = "Rey", email = "jmy1330@gmail.com" },
 ]
-keywords = ["hometax", "korea", "tax", "agent", "automation"]
+keywords = ["hometax", "korea", "tax", "agent", "automation", "nts"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Office/Business :: Financial",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Natural Language :: Korean",
 ]
 dependencies = [
     "beautifulsoup4>=4.14.3",
@@ -36,6 +40,8 @@ test = ["pytest>=8.0.0"]
 [project.urls]
 Homepage = "https://github.com/myjung/hometax-agent-client"
 Repository = "https://github.com/myjung/hometax-agent-client"
+Issues = "https://github.com/myjung/hometax-agent-client/issues"
+Documentation = "https://github.com/myjung/hometax-agent-client/tree/master/docs"
 
 [build-system]
 requires = ["hatchling"]
