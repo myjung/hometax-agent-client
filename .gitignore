@@ -1,0 +1,32 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg
+
+# Capture data — may contain personal information
+captures/
+out/
+
+# Environment / secrets
+.env
+*.session.json
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+examples/web-sample/__pycache__/

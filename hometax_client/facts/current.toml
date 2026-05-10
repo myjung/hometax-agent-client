@@ -1,0 +1,96 @@
+# HomeTax fact catalog.
+#
+# 액션 ID, 화면 ID, 서브시스템 호스트 같이 홈택스가 바꿀 수 있는 식별자들을
+# 데이터로 분리한다. 라이브러리 코드 변경 없이 toml 한 줄 수정으로 정정할 수
+# 있게 하기 위함.
+#
+# 검증 시점: 2026-04 ~ 2026-05.
+# 갱신 시 docs/hometax-facts.md 의 해당 항목과 cross-check.
+
+[meta]
+catalog_version = "2026q2"
+captured_at = "2026-05"
+
+# ------------------------------------------------------------------ #
+# Authentication                                                     #
+# ------------------------------------------------------------------ #
+
+[auth.idpw]
+validate_action = "ATXPPABA001R07"
+validate_screen = "UTXPPABA01"
+pubc_login_path = "/pubcLogin.do?domain=hometax.go.kr&mainSys=Y"
+
+[auth.session]
+session_info_action = "ATXPPAAA001R037"
+session_info_screen = "index_pp"
+token_path = "/token.do"
+
+# ------------------------------------------------------------------ #
+# Inquiries (지급명세서/세금신고)                                       #
+# ------------------------------------------------------------------ #
+
+[services.inquiries.income_statements]
+host = "hometax"
+screen_id = "UTXPPBAA48"
+action_id = "ATXPPBAA001R16"
+items_key = "dsdEtcSbmsBrkdNtplDVOList"
+
+[services.inquiries.tax_filings]
+host = "hometax"
+screen_id = "UTXPPBAA47"
+action_id = "ATXPPBAA001R15"
+items_key = "myntsTaxRtnBrkdDVOList"
+
+# ------------------------------------------------------------------ #
+# Income Tax Help Service (종합소득세 신고도움 서비스)                  #
+# ------------------------------------------------------------------ #
+
+[services.income_tax]
+income_screen_id = "UWEICAAD32"
+report_screen_id = "UWEICZAA92"
+filing_help_screen_id = "UTERNAAT32"
+insurance_screen_id = "UTERNAAD71"
+income_host = "tewe"
+report_host = "tewe"
+filing_help_host = "teht"
+insurance_host = "teht"
+filing_help_action = "ATERNABA134R02"
+insurance_taxpayer_action = "ATERNABA094R06"
+insurance_summary_action = "ATERNABA140R02"
+insurance_summary_with_bman_action = "ATERNABA140R01"
+report_codes_action = "AWEICAAA034R02"
+report_html_action = "AWEICAAA034R01"
+
+[[services.income_tax.material_kinds]]
+code = "F0025"
+name = "platform_provider"
+action_id = "AWEICAAA019R09"
+
+[[services.income_tax.material_kinds]]
+code = "A0162"
+name = "simple_business"
+action_id = "AWEICAAA029R08"
+
+[[services.income_tax.material_kinds]]
+code = "A0165"
+name = "simple_other"
+action_id = "AWEICAAA027R09"
+
+[[services.income_tax.material_kinds]]
+code = "A0161"
+name = "simple_wage"
+action_id = "AWEICAAA026R07"
+
+[[services.income_tax.material_kinds]]
+code = "F0026"
+name = "daily_wage"
+action_id = "AWEICAAA028R07"
+
+# ------------------------------------------------------------------ #
+# Address probe                                                      #
+# ------------------------------------------------------------------ #
+
+[services.address.taxpayer_basic_info]
+host = "hometax"
+screen_id = "UTXPPBAD23"
+action_id = "ATTABZAA001R01"
