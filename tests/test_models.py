@@ -90,6 +90,28 @@ def test_session_info_from_real_captured_response() -> None:
     assert info.raw["userCertClCd"] == "11"
 
 
+def test_session_info_is_guest_member() -> None:
+    """회원 sessionMap (lgnUserClCd='01') 은 is_guest=False."""
+    info = SessionInfo.from_session_map({"lgnUserClCd": "01"})
+    assert info.is_guest is False
+
+
+def test_session_info_is_guest_true() -> None:
+    """비회원 sessionMap (lgnUserClCd='02') 은 is_guest=True.
+
+    검증일 2026-05-11: ``captures/2026-05-11T13-38-50/`` 의 비회원 세션
+    sessionMap. 회원/비회원 분기는 docs/hometax-facts.md §16.
+    """
+    info = SessionInfo.from_session_map({"lgnUserClCd": "02"})
+    assert info.is_guest is True
+
+
+def test_session_info_is_guest_none_defaults_to_false() -> None:
+    """필드 누락 시 보수적 default — 회원 가정."""
+    info = SessionInfo.from_session_map({})
+    assert info.is_guest is False
+
+
 def test_dataclasses_are_frozen() -> None:
     """공개 dataclass 들은 frozen — 호출자 변경으로 인한 사이드이펙트 방지."""
     import dataclasses

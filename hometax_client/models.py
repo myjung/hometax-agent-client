@@ -21,7 +21,7 @@ class SessionInfo:
     tin: str | None
     pubc_user_no: str | None
     txpr_dscm_no: str | None       # 마스킹된 주민번호 (예: "990101*******")
-    user_class_cd: str | None      # lgnUserClCd: 01=개인일반
+    user_class_cd: str | None      # lgnUserClCd: 01=회원, 02=비회원
     user_cert_cl_cd: str | None
     cert_uqno: str | None          # crtfUqno: 인증 수단 흔적
     client_ip: str | None
@@ -41,6 +41,21 @@ class SessionInfo:
             client_ip=sm.get("lgnClientIp"),
             raw=dict(sm),
         )
+
+    @property
+    def is_guest(self) -> bool:
+        """비회원 세션 여부.
+
+        ``lgnUserClCd == "02"`` 가 비회원 시그니처 (검증일 2026-05-11,
+        ``docs/hometax-facts.md §16``). 비회원 세션은 종소세 신고도움 등
+        일부 메뉴만 접근 가능 — 호출 전에 거르고 사용자에게 안내할 수 있게
+        한다. 회원=``"01"``.
+
+        ``user_class_cd`` 가 ``None`` 이면 ``False`` (보수적 default — 회원
+        가정). raw sessionMap 안에 필드가 들어오지 않은 응답이면 호출자가
+        ``raw.get("lgnUserClCd")`` 로 직접 확인.
+        """
+        return self.user_class_cd == "02"
 
 
 @dataclass(frozen=True)

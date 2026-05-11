@@ -35,6 +35,39 @@ def _b64(text: str) -> str:
     return base64.b64encode(text.encode("utf8")).decode("utf8")
 
 
+def _post_with_tls_retry(
+    session: Any,
+    url: str,
+    *,
+    retries: int = 1,
+    delay: float = 0.5,
+    **kwargs: Any,
+) -> Any:
+    """``session.post`` + transient transport 에러 1회 재시도.
+
+    curl_cffi 의 Chrome impersonation TLS handshake 가 가끔 RST 당하는
+    케이스 대응 (`Recv failure: Connection reset by peer` / curl error 35).
+    같은 IP 에서 일반 ``curl`` 은 200 OK 인 시점에도 발생 — fingerprint
+    일시 mismatch / WAF 일시 거부 추정.
+
+    ``ConnectionError`` (``SSLError`` 포함) / ``Timeout`` 만 retry. HTTP 4xx
+    /5xx 는 retry 하지 않는다 (서버 의도 응답).
+    """
+    from curl_cffi.requests.exceptions import (
+        ConnectionError as CCEConnectionError,
+        Timeout,
+    )
+    for attempt in range(retries + 1):
+        try:
+            return session.post(url, **kwargs)
+        except (CCEConnectionError, Timeout):
+            if attempt >= retries:
+                raise
+            time.sleep(delay * (1 + attempt))
+    # unreachable — raise re-issued in loop
+    raise RuntimeError("unreachable")
+
+
 @dataclass
 class OACXResult:
     """OACX 인증 성공 시 결과."""
@@ -107,7 +140,8 @@ class OACXAuth:
         except Exception:
             pass
 
-        response = self.session.post(
+        response = _post_with_tls_retry(
+            self.session,
             f"{self.BASE_URL}/oacx/api/v1.0/trans",
             json={"token": ""},
             headers=self._json_headers(),

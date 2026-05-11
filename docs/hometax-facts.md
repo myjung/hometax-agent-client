@@ -528,21 +528,33 @@ obfuscate 한 form**. value 도 client-side 암호화. 회원 form 의 의미적
 - **`/userAthEvtxMenuUtil`**: 인증 endpoint 가 아니라 **메뉴 카탈로그 fetch**. body `type=0` (익명용) → `type=10` (인증 후 비회원 12개 메뉴). 회원도 같은 endpoint 호출.
 - **`ATERNABA244R06` vs `R07` 의 역할 분담**: 비회원 진입 시 둘 다 발동. R06 / R07 의 차이 미확인 — 메뉴 1개만 클릭한 미니 캡처로 분리 관찰 필요.
 
-### 라이브러리 함의 (구현은 다음 세션)
+### 라이브러리 함의 (2026-05-11 갱신)
 
-- 비회원도 회원과 같은 endpoint / 같은 sessionMap shape 라 별도 클래스
-  부담은 작다 — 기존 OACX 흐름 + `pubcLogin` 호출 시 비회원 파라미터만
-  추가하면 될 가능성. **단 `pubcLogin.do` body encoding 분석이 선행
-  조건**.
-- 호출 시 권한 부족 시 받는 응답 (`권한이 없는 화면입니다` /
-  `0000005,|+|0000001`) 이 현재 `SessionExpiredError` 로 분류됨 →
-  **classify_failure 의 분기 개선 후보** (P1 신규). 권한 부족과 실제 만료
-  구분되어야 호출자가 적절히 분기.
-- 진입 메뉴별 action_id (`ATERNABA244R06/R07`) 는 회원과 분리되어 있어
-  `facts/current.toml` 에 별도 entry 가 적절 (이미 등록됨).
-- `SessionInfo` 에 typed 비회원 표시 추가는 분기 필드 확정 (`lgnUserClCd`
-  등) 후. 라이브러리 사용자가 "이 세션이 비회원인지" 판단할 수 있어야
-  권한 없는 메뉴 호출 전에 짧게 거를 수 있음.
+**현재 라이브러리로 가능한 것** (보호 스크립트 RE 없이):
+
+- **bootstrap 우회** — `recon_login.py --channel chrome` 으로 사람이 비회원
+  로그인 통과 → `from_cookies(cookies.json)` 로 HometaxClient 생성. 이미
+  검증됨 (`captures/2026-05-11T13-38-50/cookies.json`). 이후 `address_candidates`
+  같이 비회원 권한 안의 메뉴 호출 정상 동작.
+- **`SessionInfo.is_guest`** — `lgnUserClCd == "02"` 기반. 호출 전에 비회원
+  세션인지 판별 → 권한 없는 메뉴 (지급명세서 등) 호출을 짧게 거를 수 있음.
+- **`PermissionDeniedError`** — 권한 없는 메뉴 호출 시 정확히 분류됨.
+  호출자가 `SessionExpiredError` 와 구분해서 사용자에게 "이 메뉴는 회원만
+  가능합니다" 안내 가능.
+- **`facts/current.toml`** 의 `[auth.guest]` / `[services.guest.income_tax]` —
+  비회원 진입 식별자 등록됨.
+
+**HTTP-only 직접 인증 (현재 미지원)** — `auth/guest_kakao.py` 같은 클래스로
+브라우저 없이 비회원 통과 구현은 다음 블로커:
+
+- 일반 `pubcLogin.do` 호출 흐름 (`common_biz.js`, `common_util.js` 의
+  `$.ajax({data: pJSON})`) 자체는 평문 form/JSON — obfuscation 없음.
+- 다만 **2026-05 보호 스크립트가 별도 layer 로 body 를 client-side
+  encrypt** (캡처 본문 `NLRoVo4=xtqr...` 형태). 호출 함수 자체가 아니라
+  intercept 레이어가 body 를 변환.
+- → 본 라이브러리에서 보호 스크립트의 변환 알고리즘 RE 가 진정한 블로커.
+  JS bundle 분석 시도했으나 의미적 키 → obfuscated 변환의 정확한 흐름
+  미확정. 현재 bootstrap 우회가 권장 진입.
 
 ---
 
