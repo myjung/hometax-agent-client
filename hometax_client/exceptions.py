@@ -76,6 +76,22 @@ class BusinessAccountUnsupportedError(WqActionFailedError):
     """
 
 
+class PermissionDeniedError(WqActionFailedError):
+    """현재 인증으로 접근 불가능한 메뉴/화면을 호출.
+
+    ``LoginRequiredError`` 와 구분: 후자는 "별도 인증 추가" (재로그인 / 등급
+    상승) 로 해결 가능. 본 에러는 **현재 인증의 종류 자체가 부적합** —
+    재인증해도 같은 결과. 회원 전용 메뉴를 비회원 세션으로 호출하는 경우 등.
+
+    검증된 트리거 (2026-05-11 비회원 세션 라이브 캡처):
+
+    - 메시지: ``"권한이 없는 화면입니다."``
+    - 코드: ``"0000005,|+|0000001,..."``
+    - 예: 비회원 세션으로 지급명세서 (``UTXPPBAA48`` / ``ATXPPBAA001R16``)
+      또는 세금신고내역 (``UTXPPBAA47`` / ``ATXPPBAA001R15``) 호출 시.
+    """
+
+
 class BlockedError(HometaxError):
     """홈택스가 명시적인 차단 코드를 반환 (EIE2*, ECE10* 등).
 
@@ -201,6 +217,7 @@ def classify_failure(
 
     - ``[FWE]`` 또는 ``로그인이 되어있지 않`` → ``LoginRequiredError``
     - ``공인인증서로 로그인`` / ``인증서로 로그인`` → ``AuthGradeInsufficientError``
+    - ``권한이 없는 화면`` / ``권한이 없는 메뉴`` → ``PermissionDeniedError``
     - ``필수입력`` / ``올바르지 않`` / ``형식이`` / ``범위`` → ``ValidationError``
     - 그 외 → ``SessionExpiredError`` (실제 권한 문제도 같은 메시지인 경우 있음)
     """
@@ -225,6 +242,17 @@ def classify_failure(
     if any(keyword in msg for keyword in auth_grade_keywords):
         return AuthGradeInsufficientError(
             f"인증 등급 부족: msg={msg!r}",
+            action_id=action_id,
+            raw_msg=msg,
+        )
+
+    permission_keywords = (
+        "권한이 없는 화면",
+        "권한이 없는 메뉴",
+    )
+    if any(keyword in msg for keyword in permission_keywords):
+        return PermissionDeniedError(
+            f"메뉴/화면 권한 없음: msg={msg!r} code={code!r}",
             action_id=action_id,
             raw_msg=msg,
         )

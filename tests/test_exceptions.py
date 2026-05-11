@@ -9,6 +9,7 @@ from hometax_client.exceptions import (
     BlockedError,
     HometaxError,
     LoginRequiredError,
+    PermissionDeniedError,
     ResponseSchemaDriftError,
     SessionExpiredError,
     UnknownResponseError,
@@ -26,6 +27,7 @@ def test_all_errors_inherit_hometax_error() -> None:
         ValidationError,
         LoginRequiredError,
         AuthGradeInsufficientError,
+        PermissionDeniedError,
         BlockedError,
         UnknownResponseError,
         ResponseSchemaDriftError,
@@ -86,6 +88,33 @@ def test_classify_auth_grade_for_short_cert_phrase() -> None:
     rm = {"result": "F", "msg": "보안 강화를 위해 인증서로 로그인 해주세요."}
     exc = classify_failure(rm)
     assert isinstance(exc, AuthGradeInsufficientError)
+
+
+def test_classify_permission_denied_for_unauthorized_screen() -> None:
+    """비회원 세션이 회원 전용 메뉴 호출 시 받는 메시지.
+
+    검증일 2026-05-11: 비회원 세션으로 ``client.inquiries.income_statements``
+    호출 시 ``0000005,|+|0000001,$권한이 없는 화면입니다.`` 응답. 종전엔
+    ``SessionExpiredError`` 로 분류되어 "재인증 하세요" 안내가 부정확
+    (재인증해도 같은 결과 — 회원 인증 종류 자체가 필요).
+    """
+    rm = {
+        "result": "F",
+        "msg": "0000005,|+|0000001,$권한이 없는 화면입니다.",
+    }
+    exc = classify_failure(rm, action_id="ATXPPBAA001R16")
+    assert isinstance(exc, PermissionDeniedError)
+    # SessionExpiredError 가 default 였던 회귀를 막는다.
+    assert not isinstance(exc, SessionExpiredError)
+    assert exc.action_id == "ATXPPBAA001R16"
+    assert "권한이 없는" in (exc.raw_msg or "")
+
+
+def test_classify_permission_denied_short_phrase() -> None:
+    """다른 표기 (메뉴) 도 같은 분류."""
+    rm = {"result": "F", "msg": "권한이 없는 메뉴입니다."}
+    exc = classify_failure(rm)
+    assert isinstance(exc, PermissionDeniedError)
 
 
 def test_classify_with_nested_error_msg_dict() -> None:

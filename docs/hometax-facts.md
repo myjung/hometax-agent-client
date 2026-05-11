@@ -450,27 +450,28 @@ POST body 끝에 일관 등장:
 다만 라이브 호출로 확인된 결과 **권한 범위는 회원과 다르다** (아래
 §"비회원 권한 매핑" 참조).
 
-### sessionMap 의 회원/비회원 분기 필드 (가설)
+### sessionMap 의 회원/비회원 분기 필드 (확정 2026-05-11)
 
-다음 필드들의 비회원 캡처값. **회원 e2e 와 비교가 끝나지 않아 어느 필드가
-진짜 분기 신호인지 미확정**.
+회원 e2e (`captures/naver-e2e/trace.har`, 2026-05-11) 와 비회원 캡처
+(`captures/2026-05-11T13-38-50/trace.har`) 의 `permission.do` 응답
+sessionMap 비교:
 
-| 필드 | 비회원 캡처값 | 회원 e2e 비교 (미수집) | 비고 |
+| 필드 | 회원 | 비회원 | 결론 |
 |---|---|---|---|
-| `lgnUserClCd` | `"02"` | (수집 필요) | **분기 1순위 후보**. hometax-scraper 에 흔적 없음 → 비회원 흐름에서 새로 보인 신호 |
-| `lgnCertCd` | `"01"` | (수집 필요) | 인증 수단 코드 (카카오) |
-| `athGrpCd` | `"0000005"` | (수집 필요) | 인증 그룹 |
-| `haboCl` | `"Z"` | (수집 필요) | — |
+| **`lgnUserClCd`** | `"01"` | `"02"` | **분기 시그니처 확정**. 라이브러리에서 비회원 세션 판별 시 이 값 사용 |
+| `lgnCertCd` | `"01"` | `"01"` | 인증 수단 코드 (둘 다 카카오 OACX — 같음). 분기 신호 아님 |
+| `haboCl` | `"Z"` | `"Z"` | 분기 신호 아님 |
+| `athGrpCd` | (index_pp 응답에 부재) | `"0000005"` | 화면별 상이 — 분기 후보 약함. 확정 미완 |
 
 다음 필드는 **분기 신호가 아니라 wqAction body 에 forward 되는 단순
 분류 코드**. 옛 `hometax-scraper` (`user.py:361,383`) 의 수임동의
 (`ATEABHAA001U05`) 호출에서 `permission` 응답의 `userClsfCd` 를 그대로
-다음 요청 body 에 전달하는 패턴이 강한 증거.
+다음 요청 body 에 전달하는 패턴이 강한 증거. 회원/비회원 모두 동일 값 = 분기 아님 재확인.
 
-| 필드 | 비회원 캡처값 | 용도 |
-|---|---|---|
-| `userClsfCd` | `"01"` | 사용자 분류 — wqAction 호출 시 forward |
-| `txprClsfCd` | `"01"` | 납세자 분류 — wqAction 호출 시 forward |
+| 필드 | 회원 | 비회원 | 용도 |
+|---|---|---|---|
+| `userClsfCd` | `"01"` | `"01"` | 사용자 분류 — wqAction 호출 시 forward |
+| `txprClsfCd` | `"01"` | `"01"` | 납세자 분류 — wqAction 호출 시 forward |
 
 ### 비회원 권한 매핑 (라이브 검증 2026-05-11)
 
@@ -491,10 +492,39 @@ POST body 끝에 일관 등장:
 지급명세서 / 세금신고내역 등은 회원 권한 필요. **"비회원 = 회원과 거의
 같은 권한" 가설은 폐기**.
 
+### `pubcLogin.do` body 비교 — 회원 vs 비회원 (2026-05-11)
+
+같은 endpoint 지만 body 구조가 완전히 다르다.
+
+**회원 OACX** (본 라이브러리 `auth/oacx.py:279-288` 의 hard-coded form):
+```
+moisCertYn=Y&newGpinYn=Y&reqTxId=<cert_token>&ssoStatus=&portalStatus=
+&scrnId=UTXPPABA01&userScrnRslnXcCnt=1920&userScrnRslnYcCnt=1080
+```
+Content-Type `application/x-www-form-urlencoded`, 평문, ~수십 bytes.
+
+**비회원 OACX** (`captures/2026-05-11T13-38-50/`):
+```
+NLRoVo4=xtqrpELgolLupeP6QkCANZzejBdDfBC59k7DVGO5cuw0... (~2,959 bytes)
+```
+첫 key 자체가 의미 없는 영숫자 (`NLRoVo4`) — **브라우저 JS 가 키 이름까지
+obfuscate 한 form**. value 도 client-side 암호화. 회원 form 의 의미적
+키들 (`moisCertYn`, `reqTxId` 등) 과 매핑 불명.
+
+**라이브러리 구현 블로커**:
+- 비회원 흐름의 라이브러리 구현 (`auth/guest_kakao.py` 등) 은 회원 OACX
+  처럼 단순 dict POST 로 재현 불가.
+- 필요 작업: 브라우저 devtools 에서 pubcLogin 호출하는 JS 함수
+  breakpoint → 의미 있는 input (이름 / RRN / cert_token / 화면 ID 등) →
+  obfuscated key/value 매핑 추적. 또는 protected-login 보호 스크립트
+  자체의 알고리즘 분석.
+- 본 라이브러리의 `nts_encrypt` (wqAction 서명용) 과는 다른 알고리즘.
+- 다음 세션 후보: 비회원 로그인 JS bundle 분석 (URL 확보 →
+  beautified → 의미 추출).
+
 ### 미해결 / 추정
 
 - **`TMPR_MAIN` cookie 출처**: dump 시점 cookies.json 에 존재하지만 HAR 의 어떤 응답 set-cookie 헤더에도 등장 안 함. §15 와 동일하게 페이지 JS 의 `document.cookie` 로 set 되는 메타 cookie 추정 (시그니처 cookie 아님).
-- **`pubcLogin.do` body 의 정확한 encoding**: 회원과 같은 endpoint 인데 body 가 ~3KB 의 영숫자 문자열. nts_encrypt 와 다른 별도 client-side 인코딩 가능성. 회원 흐름과의 body 비교 + JS 분석 필요.
 - **`/userAthEvtxMenuUtil`**: 인증 endpoint 가 아니라 **메뉴 카탈로그 fetch**. body `type=0` (익명용) → `type=10` (인증 후 비회원 12개 메뉴). 회원도 같은 endpoint 호출.
 - **`ATERNABA244R06` vs `R07` 의 역할 분담**: 비회원 진입 시 둘 다 발동. R06 / R07 의 차이 미확인 — 메뉴 1개만 클릭한 미니 캡처로 분리 관찰 필요.
 

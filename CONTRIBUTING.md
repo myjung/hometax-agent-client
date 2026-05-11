@@ -2,6 +2,13 @@
 
 기여 환영합니다. 아래 절차와 컨벤션을 따라주시면 리뷰가 빠릅니다.
 
+> **시작점**: [`AGENTS.md`](AGENTS.md) §"작업 전 반드시 확인 — 시작점
+> 매트릭스" 가 작업 종류별 진입점 + 봐야 할 docs 를 가리킵니다. PR 가이드는
+> §"PR 기여" 에. 본 파일은 그 보완.
+>
+> **이슈 / PR 템플릿**: GitHub 가 자동으로 보여줍니다
+> (`.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`).
+
 ## 보안 이슈
 
 자격증명 / 세션 / PII 노출 관련 취약점은 **공개 issue 대신** [`SECURITY.md`](SECURITY.md)
@@ -98,16 +105,21 @@ PR 통과 조건. 룰 셋 `E + W + F`, line-length 120 은 `pyproject.toml`
 
 ## 라이브러리 vs 워크플로 경계
 
-본 라이브러리는 다음을 의도적으로 하지 않습니다 (`docs/architecture.md`
-참조):
+본 라이브러리 **코어 (`hometax_client/`)** 는 다음을 의도적으로 하지
+않습니다 (`docs/architecture.md` 참조):
 
 - 사용자 산출물 디스크 저장 (PDF/Excel/CSV)
-- 한국어 파일명 / 폴더명 결정
+- 한국어 파일명 / 폴더명 결정 / stemming
 - 일괄 조회 진행 상태 / 세션 lock / UI
 - 자동 세션 refresh / 만료 시 자동 재인증
+- 윈도우 `.bat` / `.ps1`
 
-이런 책임은 호출자 / 워크플로 패키지 (별도 repo) 가 담당합니다. PR 이 이
-경계를 넘으면 reject 되거나 별도 패키지로 분리 제안됩니다.
+코어 PR 로 위 영역이 들어오면 reject 됩니다. 다만 **`examples/` 디렉토리는
+demo 형태로 환영** — 자세한 가드레일은
+[`examples/README.md`](examples/README.md) 의 5개 규칙 (한 파일 / `[examples]`
+extra 격리 / PII 출력 위치 / 인덱스 갱신 / import 가능성) 을 따릅니다.
+본격 사무실 운영 워크플로는 별도 패키지로 분리하시고 본 라이브러리를
+dependency 로 가져가세요.
 
 ## 응답 시간 / 거부 사유
 
