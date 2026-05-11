@@ -94,6 +94,113 @@ statements = client.inquiries.income_statements(attr_year=2024)
 `from_cookies` 가 Playwright 의 cookies array 포맷을 직접 받기 때문에
 별도 변환 불필요. `ESSENTIAL_COOKIES` 에 등록된 쿠키만 추려 주입한다.
 
+## 세션 재사용으로 둘러보기 — `--resume`
+
+한 번 로그인한 캡처의 `storage_state.json` 을 다음 캡처에 다시 주입하면
+재로그인 없이 곧바로 메뉴를 둘러볼 수 있다. cookies + localStorage 가
+복원되어 사람이 로그인 직후 보는 상태와 동일하게 시작한다.
+
+```bash
+# 1차: 사람이 로그인
+.venv/bin/python examples/recon_login.py
+# → captures/2026-05-11T10-00-00/
+
+# 2차: 메뉴 둘러보기 (재로그인 없음)
+.venv/bin/python examples/recon_login.py --resume captures/2026-05-11T10-00-00/
+# → captures/2026-05-11T10-15-00/ (새 HAR + 갱신 세션 dump)
+
+# 3차+: 직전 캡처를 다시 가리키며 체인
+.venv/bin/python examples/recon_login.py --resume captures/2026-05-11T10-15-00/
+```
+
+`--resume` 의 PATH 가 디렉토리면 `PATH/storage_state.json` 을, 파일이면
+그대로 사용한다. 세션이 만료되었으면 홈택스가 로그인 페이지로
+리다이렉트 — 그땐 그냥 새 1차 로그인부터 다시.
+
+## HTTP-only 세션 → 브라우저 — `export_storage_state`
+
+이미 `HometaxClient` 로 OACX (카카오 등) 인증을 통과해 cookies 만 보유한
+상태에서도 같은 세션으로 브라우저를 띄울 수 있다.
+
+```python
+from hometax_client import HometaxClient
+from hometax_client.auth import KakaoAuth
+from hometax_client.bootstrap import CaptureSession
+
+client = KakaoAuth(user_id="...", rrn="...").authenticate().to_client()
+
+# HTTP 세션의 cookies 를 Playwright storage_state 포맷으로 dump
+client.export_storage_state("captures/oacx-browse/storage_state.json")
+
+with CaptureSession(
+    storage_state="captures/oacx-browse/storage_state.json",
+    output_dir="captures/oacx-browse",
+) as cap:
+    cap.page.goto("https://hometax.go.kr/")
+    cap.wait_for_user()        # 메뉴 둘러보기
+    cap.dump()                 # 갱신된 cookies + HAR 저장
+```
+
+`export_storage_state` 는 `ESSENTIAL_COOKIES` 만 0o600 으로 저장한다.
+localStorage 는 비지만 홈택스는 cookies 만으로 세션을 인식 — 페이지
+첫 로드 시 SPA 가 client-side state 를 새로 fetch 한다 (사람이 로그인
+직후 보는 상태와 동일).
+
+## HAR 에서 wqAction 호출 추출 — `iter_wq_actions`
+
+캡처한 `trace.har` 에서 `wqAction.do` 호출만 골라 균일한 dataclass 로
+받는다. 새 서비스 구현 전 `action_id` / `screen_id` / 응답 모양 파악에
+사용.
+
+```python
+from hometax_client.bootstrap import iter_wq_actions
+
+for call in iter_wq_actions("captures/2026-05-11T10-15-00/trace.har"):
+    print(call.action_id, call.screen_id, call.host)
+    if call.action_id == "ATXPPZXA001R02":
+        print(sorted(call.response_body.keys()))
+```
+
+`WqActionCall` 필드: `action_id`, `screen_id`, `host`, `url`, `method`,
+`status`, `started_at`, `request_text`, `request_body` (HMAC suffix 제거된
+JSON), `response_text`, `response_body`. JSON 파싱 실패 시 body 는 `{}`
+이고 `*_text` 에 raw 가 있다.
+
+본 reader 는 Playwright 의존 없음. `[bootstrap]` extras 없이도 동작한다.
+
+## 에이전트 탐색 패턴
+
+Claude Code / Codex / Cursor 등이 캡처 세션 위에서 화면을 탐색할 때의
+권장 패턴은 **매 스텝마다 짧은 Python 스크립트를 작성/실행** 하는 것이다.
+서버 / 장기 실행 프로세스 도입 없이 기존 도구만으로 stateful 비슷하게
+동작한다.
+
+```python
+# 에이전트가 작성하는 한 스텝
+from hometax_client.bootstrap import CaptureSession
+
+with CaptureSession(
+    storage_state="captures/A/storage_state.json",
+    output_dir="captures/A",         # 같은 dir 에 갱신 dump (체인)
+    headed=False,
+) as cap:
+    cap.page.goto("https://hometax.go.kr/")
+    cap.page.click("text=종합소득세")
+    cap.page.wait_for_load_state("networkidle")
+    print(cap.page.url, cap.page.title())
+    cap.dump()                       # storage_state + HAR 갱신
+```
+
+- **stateful 흐름**: 매 스텝 끝에 `cap.dump()` 가 cookies / localStorage
+  를 같은 디렉토리에 덮어쓰므로 다음 스텝이 동일 세션으로 재개.
+- **분석은 HAR**: 한 스텝 끝나면 `iter_wq_actions(har)` 로 그 사이 발생한
+  RPC 호출을 균일하게 읽는다.
+- **한계**: 브라우저가 매 스텝마다 새로 뜬다 (cold start 3–5초). SPA 의
+  화면 위치 (열어둔 탭/모달) 는 잃으므로 URL deep-link 로 재진입.
+  대부분의 홈택스 메뉴는 URL 로 진입 가능해서 실용상 큰 문제는 없다.
+- **위험 액션**: 데이터 영향 (신고/제출/삭제) 있는 클릭은 사람 검토 후만.
+  헤드 모드 (`headed=True`) 로 사람이 보면서 진행을 권장.
+
 ## 코드에서 직접 사용 — `CaptureSession`
 
 CLI 가 부족하면 컨텍스트 매니저로 직접:
@@ -131,6 +238,7 @@ print(paths["har"])
 | `--channel` | (번들 chromium) | `chrome` / `msedge` 등 시스템 브라우저 |
 | `--timeout` | 600 | `--auto-close` 모드 대기 초 |
 | `--indicator` | `NTS_REQUEST_SYSTEM_CODE_P` | `--auto-close` 신호 쿠키 (post-RRN. 반복 가능) |
+| `--resume PATH` | off | 이전 캡처의 storage_state 주입 → 재로그인 없이 둘러보기. PATH 가 디렉토리면 `PATH/storage_state.json`, 파일이면 그대로 |
 
 ## 분석 팁 — HAR
 
@@ -146,6 +254,13 @@ mitmweb -r captures/.../trace.har
 # 특정 액션만 jq 로
 jq '.log.entries[] | select(.request.url | contains("pubcLogin"))' \
    captures/.../trace.har
+
+# 라이브러리 reader — wqAction.do 호출만 균일한 dataclass 로
+python -c "
+from hometax_client.bootstrap import iter_wq_actions
+for c in iter_wq_actions('captures/.../trace.har'):
+    print(c.action_id, c.screen_id, c.host)
+"
 ```
 
 ## 보안 / 위생

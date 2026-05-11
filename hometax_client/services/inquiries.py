@@ -16,7 +16,7 @@ from ..models import IncomeStatement, TaxFiling
 from ._base import ServiceBase
 
 if TYPE_CHECKING:
-    from ..client import HometaxClient
+    pass
 
 
 class InquiryService(ServiceBase):

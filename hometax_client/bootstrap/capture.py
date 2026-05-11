@@ -98,6 +98,7 @@ class CaptureSession:
         viewport: tuple[int, int] = _DEFAULT_VIEWPORT,
         user_agent: str | None = None,
         locale: str = "ko-KR",
+        storage_state: str | Path | None = None,
     ) -> None:
         """
         Args:
@@ -110,6 +111,10 @@ class CaptureSession:
             viewport: 창 크기. 모바일 UA 가 필요하면 user_agent 도 같이 지정.
             user_agent: UA 오버라이드. ``None`` 이면 chromium 기본.
             locale: 브라우저 locale. 홈택스는 ``ko-KR`` 가정.
+            storage_state: 이전 캡처의 ``storage_state.json`` 경로. 지정하면
+                해당 cookies + localStorage 상태로 컨텍스트가 시작되어 재로그인
+                없이 둘러보기가 가능하다. 세션이 만료되었으면 홈택스가 로그인
+                페이지로 리다이렉트하므로 호출자가 인지 가능.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -119,6 +124,13 @@ class CaptureSession:
         self.viewport = viewport
         self.user_agent = user_agent
         self.locale = locale
+        self.storage_state = (
+            Path(storage_state) if storage_state is not None else None
+        )
+        if self.storage_state is not None and not self.storage_state.exists():
+            raise FileNotFoundError(
+                f"storage_state 파일이 없습니다: {self.storage_state}"
+            )
         self._pw: Any = None
         self._browser: Any = None
         self._context: BrowserContext | None = None
@@ -156,6 +168,10 @@ class CaptureSession:
         }
         if self.user_agent:
             context_kwargs["user_agent"] = self.user_agent
+        if self.storage_state is not None:
+            # cookies + localStorage 복원. 세션 만료 시 홈택스가 로그인 페이지로
+            # 리다이렉트하므로 호출자가 인지 가능.
+            context_kwargs["storage_state"] = str(self.storage_state)
         if self.record_har:
             context_kwargs["record_har_path"] = str(self._har_path)
             # "embed" = HAR 안에 base64 본문 인라인. mitmproxy / Chrome
@@ -332,6 +348,7 @@ def capture_login(
     wait_mode: str = "manual",
     timeout: float = 600.0,
     indicator_cookies: tuple[str, ...] = LOGIN_INDICATOR_COOKIES,
+    storage_state: str | Path | None = None,
 ) -> dict[str, Path]:
     """원샷 헬퍼: 브라우저 띄우고 → 로그인 대기 → 산출물 저장.
 
@@ -350,6 +367,8 @@ def capture_login(
             잘못 fire 할 수 있어 recon 용으로는 ``manual`` 권장.
         timeout: ``cookie`` 모드의 최대 대기 초.
         indicator_cookies: ``cookie`` 모드의 신호 쿠키.
+        storage_state: 이전 캡처의 ``storage_state.json`` 경로. 지정하면
+            재로그인 없이 둘러보기 모드 (만료 시 로그인 페이지로 리다이렉트).
 
     Returns:
         ``output_dir``, ``cookies``, ``storage_state``, ``meta``,
@@ -367,6 +386,7 @@ def capture_login(
         headed=headed,
         record_har=record_har,
         channel=channel,
+        storage_state=storage_state,
     ) as cap:
         cap.open_start_page(url)
         if wait_mode == "manual":

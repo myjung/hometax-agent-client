@@ -108,6 +108,17 @@ def main(argv: list[str] | None = None) -> int:
             f"기본: {list(LOGIN_INDICATOR_COOKIES)}"
         ),
     )
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "이전 캡처의 storage_state 를 주입해 재로그인 없이 둘러보기. "
+            "PATH 가 디렉토리면 PATH/storage_state.json, 파일이면 그대로 사용. "
+            "세션 만료 시 홈택스가 로그인 페이지로 리다이렉트한다."
+        ),
+    )
     args = parser.parse_args(argv)
 
     indicator = (
@@ -115,7 +126,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     wait_mode = "cookie" if args.auto_close else "manual"
 
+    storage_state: Path | None = None
+    if args.resume is not None:
+        resume = args.resume
+        if resume.is_dir():
+            storage_state = resume / "storage_state.json"
+        else:
+            storage_state = resume
+        if not storage_state.exists():
+            print(
+                f"[recon] --resume: storage_state 파일이 없습니다: "
+                f"{storage_state}",
+                file=sys.stderr,
+            )
+            return 4
+
     print(f"[recon] launching browser → {args.url}", file=sys.stderr)
+    if storage_state is not None:
+        print(
+            f"[recon] resuming session from {storage_state} "
+            "(재로그인 없이 둘러보기 모드)",
+            file=sys.stderr,
+        )
     if wait_mode == "manual":
         print(
             "[recon] log in (메인 → 로그인 버튼 → ID/PW + RRN 등). "
@@ -139,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             wait_mode=wait_mode,
             timeout=args.timeout,
             indicator_cookies=indicator,
+            storage_state=storage_state,
         )
     except TimeoutError as exc:
         print(f"[recon] timeout: {exc}", file=sys.stderr)

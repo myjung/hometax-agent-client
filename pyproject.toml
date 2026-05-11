@@ -37,6 +37,14 @@ bootstrap = ["playwright>=1.59.0"]
 # Test dependencies.
 test = ["pytest>=8.0.0"]
 
+# Maintainer dev tooling (lint/format). Not exposed to PyPI consumers — only
+# pulled by `uv sync` for local development.
+[dependency-groups]
+dev = [
+    "ruff>=0.7",
+    "pytest>=8.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/myjung/hometax-agent-client"
 Repository = "https://github.com/myjung/hometax-agent-client"
@@ -57,5 +65,10 @@ packages = ["hometax_client"]
 testpaths = ["tests"]
 pythonpath = ["."]
 
-[tool.pycodestyle]
-max-line-length = 120
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# 기존 pycodestyle 게이트와 동등 + pyflakes. 룰 확장은 별도 결정.
+select = ["E", "W", "F"]

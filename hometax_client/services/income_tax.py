@@ -20,11 +20,8 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote
 
 from .. import facts
 from ..crypto import nts_report_signature
@@ -36,7 +33,7 @@ from ..exceptions import (
 from ._base import ServiceBase
 
 if TYPE_CHECKING:
-    from ..client import HometaxClient
+    pass
 
 
 # ------------------------------------------------------------------ #
@@ -176,7 +173,7 @@ class IncomeTaxService(ServiceBase):
         income_screen = facts.lookup(
             "services", "income_tax", "income_screen_id",
         )
-        tin = self._ensure_tin()
+        self._ensure_tin()
         self._c.activate_tewe_session(
             screen_id=income_screen,
             popup=True,

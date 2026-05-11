@@ -21,8 +21,7 @@ import os
 import sys
 from typing import Any
 
-from hometax_client import HometaxClient
-from hometax_client.auth import NaverAuth, OACXAuth
+from hometax_client.auth import NaverAuth
 from hometax_client.auth.oacx import OACXAuthError
 
 

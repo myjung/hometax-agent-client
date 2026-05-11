@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 3
         print(
-            f"[health] re-run with --refresh to update cache",
+            "[health] re-run with --refresh to update cache",
             file=sys.stderr,
         )
         return 1

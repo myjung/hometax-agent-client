@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import secrets
 import string
@@ -200,6 +199,52 @@ class HometaxClient:
         from .sessions import write_session_file
         return write_session_file(Path(path), self._session_payload())
 
+    def export_storage_state(
+        self,
+        path: str | Path,
+    ) -> Path:
+        """현재 cookies 를 Playwright ``storage_state.json`` 포맷으로 export.
+
+        OACX/IdPw 등 HTTP-only 로 통과한 세션을 ``bootstrap.CaptureSession``
+        에 그대로 주입해 재로그인 없이 브라우저로 화면을 둘러보기 위한 진입점.
+
+        ``ESSENTIAL_COOKIES`` 만 export. 파일 권한 0o600. ``save_session`` 과
+        별개 — ``save_session`` 은 라이브러리 자체 캐시, ``export_storage_state``
+        는 브라우저 주입용. ``from_cookies`` 의 자연스러운 역방향.
+
+        Example::
+
+            client = KakaoAuth(...).authenticate().to_client()
+            client.export_storage_state("captures/oacx/storage_state.json")
+
+            from hometax_client.bootstrap import CaptureSession
+            with CaptureSession(
+                storage_state="captures/oacx/storage_state.json",
+                output_dir="captures/oacx",
+            ) as cap:
+                cap.page.goto("https://hometax.go.kr/")
+                ...
+        """
+        from .sessions import write_session_file
+        cookies = []
+        for cookie in self._session.cookies.jar:
+            if cookie.name not in ESSENTIAL_COOKIES:
+                continue
+            cookies.append({
+                "name": cookie.name,
+                "value": cookie.value,
+                "domain": cookie.domain or "",
+                "path": cookie.path or "/",
+                "expires": (
+                    cookie.expires if cookie.expires is not None else -1
+                ),
+                "httpOnly": False,
+                "secure": bool(cookie.secure),
+                "sameSite": "Lax",
+            })
+        payload = {"cookies": cookies, "origins": []}
+        return write_session_file(Path(path), payload)
+
     @classmethod
     def login(
         cls,
@@ -336,7 +381,6 @@ class HometaxClient:
             f"?w2xPath=/ui/pp/index_pp.xml&menuCd=index4"
         )
 
-        last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             signed = body_json + nts_encrypt(body_json, user_id=self.user_id)
             headers = {
@@ -365,7 +409,6 @@ class HometaxClient:
                 )
                 break
             except Exception as exc:
-                last_exc = exc
                 if attempt < self.max_retries:
                     time.sleep(0.5 + 0.5 * attempt)
                     continue

@@ -29,6 +29,7 @@ from .capture import (
     CaptureSession,
     capture_login,
 )
+from .har import WqActionCall, iter_wq_actions
 
 __all__ = [
     "CaptureSession",
@@ -37,4 +38,6 @@ __all__ = [
     "DEFAULT_PORTAL_URL",
     "DEFAULT_LOGIN_URL",
     "LOGIN_INDICATOR_COOKIES",
+    "WqActionCall",
+    "iter_wq_actions",
 ]
