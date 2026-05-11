@@ -537,12 +537,9 @@ class IncomeTaxService(ServiceBase):
             )
             rm = data.get("resultMsg") or {}
             last_msg = rm.get("msg") or ""
-            if "gridList01" not in data:
-                raise ResponseSchemaDriftError(
-                    action_id=kind.action_id,
-                    missing=["gridList01"],
-                    raw=data,
-                )
+            # ``gridList01`` 부재 = 해당 자료구분에 사용자 데이터가 없는
+            # 정상 케이스. 응답에 grid 키 자체가 빠지는 형태로 empty 를
+            # 시그널링. drift 가 아니라 0건 결과로 처리한다.
             page_items = list(data.get("gridList01") or [])
             items.extend(page_items)
 

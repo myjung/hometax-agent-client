@@ -202,7 +202,13 @@ def _failure_code(rm: dict[str, Any]) -> str:
         return code
     error_msg = rm.get("errorMsg")
     if isinstance(error_msg, dict):
-        return _first_text(error_msg, ("code", "errCd", "errorCode"))
+        nested = _first_text(error_msg, ("code", "errCd", "errorCode"))
+        if nested:
+            return nested
+    # ``rtnVal`` 안에 code 가 들어오는 케이스 (일부 권한/세션 거부 응답).
+    rtn_val = rm.get("rtnVal")
+    if isinstance(rtn_val, dict):
+        return _first_text(rtn_val, ("code", "errCd", "errorCode"))
     return ""
 
 
@@ -249,6 +255,10 @@ def classify_failure(
     permission_keywords = (
         "권한이 없는 화면",
         "권한이 없는 메뉴",
+        # ``pubcPermission`` 가 msg slot 에 그대로 잡힌 케이스 — 응답 dict
+        # 구조에 따라 ``code`` 슬롯이 비어 있고 ``errorMsg.code`` 가 msg 로
+        # 추출되는 경로가 있다.
+        "pubcPermission",
     )
     permission_codes = ("pubcPermission",)
     if (

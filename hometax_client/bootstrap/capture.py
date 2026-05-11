@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -333,11 +334,28 @@ class CaptureSession:
 
         다단계 인증 / 알 수 없는 새 흐름을 처음 분석할 때 사용. 쿠키 기반
         자동 종료가 어느 단계에서 fire 하는지 모를 때 안전한 default.
+
+        Raises:
+            RuntimeError: 비대화형 stdin (스크립트 background / 파이프 등)
+                에서 호출된 경우. 종전엔 ``EOFError`` 가 silent 하게 잡혀
+                즉시 return 되었지만, 그 동작은 사용자가 모르는 사이
+                ``dump()`` 가 실행되어 빈 캡처가 저장되는 결과를 낳았다.
+                비대화형 호출에서는 :meth:`wait_for_login` (쿠키 기반) 을
+                쓰거나, 호출자가 자체적으로 종료 신호를 만들어야 한다.
         """
+        if not sys.stdin.isatty():
+            raise RuntimeError(
+                "wait_for_user 는 대화형 터미널에서만 동작합니다. "
+                "비대화형 호출 (스크립트 background / 파이프 / "
+                "Playwright 자동화 등) 에서는 wait_for_login("
+                "timeout=, indicator_cookies=) 또는 자체 종료 로직을 "
+                "사용하세요."
+            )
         try:
             input(prompt)
         except EOFError:
-            # stdin 이 닫혔거나 비대화형 — 그냥 return.
+            # stdin 이 도중에 닫힘 — 대화형 시작 후 stdin EOF 받은 케이스.
+            # isatty 검사 통과한 상태라 사용자 의도된 종료로 간주.
             pass
 
     # ------------------------------------------------------------------ #

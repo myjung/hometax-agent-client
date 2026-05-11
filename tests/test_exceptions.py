@@ -90,6 +90,29 @@ def test_classify_auth_grade_for_short_cert_phrase() -> None:
     assert isinstance(exc, AuthGradeInsufficientError)
 
 
+def test_classify_permission_denied_by_msg_pubcpermission() -> None:
+    """msg slot 에 ``pubcPermission`` 이 그대로 들어온 케이스.
+
+    응답 dict 의 ``errorMsg.code`` 가 nested 추출되면서 message 가
+    ``pubcPermission`` 으로 잡히는 경로 (retry path 의 분류 응답).
+    """
+    rm = {"result": None, "msg": "pubcPermission"}
+    exc = classify_failure(rm, action_id="permission:UWEICZAA92")
+    assert isinstance(exc, PermissionDeniedError)
+    assert not isinstance(exc, SessionExpiredError)
+
+
+def test_classify_permission_denied_by_rtnval_code() -> None:
+    """``rtnVal.code`` 슬롯에 ``pubcPermission`` 이 들어온 케이스."""
+    rm = {
+        "result": "F",
+        "rtnVal": {"code": "pubcPermission"},
+    }
+    exc = classify_failure(rm, action_id="AT001")
+    assert isinstance(exc, PermissionDeniedError)
+    assert not isinstance(exc, SessionExpiredError)
+
+
 def test_classify_permission_denied_by_code_only() -> None:
     """``code='pubcPermission'`` 만 와도 분류. msg 빈 케이스 대응.
 
