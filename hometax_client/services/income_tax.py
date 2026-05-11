@@ -353,6 +353,9 @@ class IncomeTaxService(ServiceBase):
         insurance_screen = facts.lookup(
             "services", "income_tax", "insurance_screen_id",
         )
+        insurance_taxpayer_action = facts.lookup(
+            "services", "income_tax", "insurance_taxpayer_action",
+        )
 
         self._probe_address_source(
             sources=sources,
@@ -367,7 +370,7 @@ class IncomeTaxService(ServiceBase):
             candidates=candidates,
             label="연금건강고용산재보험료 납세자 조회",
             screen_id=insurance_screen,
-            action_id="ATERNABA094R06",
+            action_id=insurance_taxpayer_action,
             fetch=lambda: (
                 self._activate_teht(insurance_screen, INSURANCE_REFERER)
                 or self._fetch_insurance_taxpayer(
@@ -488,6 +491,12 @@ class IncomeTaxService(ServiceBase):
             )
             rm = data.get("resultMsg") or {}
             last_msg = rm.get("msg") or ""
+            if "gridList01" not in data:
+                raise ResponseSchemaDriftError(
+                    action_id=kind.action_id,
+                    missing=["gridList01"],
+                    raw=data,
+                )
             page_items = list(data.get("gridList01") or [])
             items.extend(page_items)
 

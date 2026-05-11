@@ -49,10 +49,20 @@ def _random_query(length: int = 21) -> str:
 
 
 def _normalize_cookie_domain(domain: str | None) -> str:
-    """Playwright 쿠키 도메인 (.hometax.go.kr) → curl_cffi 형식."""
+    """쿠키 도메인 정규화.
+
+    Playwright 가 dump 한 cookies array 의 도메인은 보통 ``.hometax.go.kr``
+    형태 (leading dot — ``http.cookiejar`` 의 host-only=False 신호). leading
+    dot 을 보존해야 ``hometax.go.kr`` 본 호스트와 ``teht.hometax.go.kr``
+    서브호스트 양쪽에 모두 domain-match 된다.
+
+    비어 있을 때만 합리적 default (``.hometax.go.kr``) 적용. leading dot 이
+    없으면 보존된 그대로 (host-only) 반환 — 호출자가 의도해서 host-only 로
+    set 한 경우를 깨지 않기 위함.
+    """
     if not domain:
-        return "hometax.go.kr"
-    return domain.lstrip(".") or "hometax.go.kr"
+        return ".hometax.go.kr"
+    return domain
 
 
 def _resolve_host(host: str) -> str:
@@ -430,9 +440,14 @@ class HometaxClient:
 
         rm = data.get("resultMsg") or {}
         sm = rm.get("sessionMap") or {}
-        if not sm.get("userId"):
-            if rm.get("result") == "F" or "로그인" in (rm.get("msg") or ""):
-                raise classify_failure(rm, action_id=action_id)
+        # 실패는 result == "F" 가 1차 신호 (sessionMap 동반 여부와 무관).
+        # 인증된 세션의 validation 실패 (잘못된 파라미터 등) 시 sessionMap 이
+        # 같이 와도 raise 해야 한다.
+        if rm.get("result") == "F":
+            raise classify_failure(rm, action_id=action_id)
+        # 일부 응답은 result 필드 없이 한국어 msg 만 — 보조 신호로 처리.
+        if not sm.get("userId") and "로그인" in (rm.get("msg") or ""):
+            raise classify_failure(rm, action_id=action_id)
 
         return data
 

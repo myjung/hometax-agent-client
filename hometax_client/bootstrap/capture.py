@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -60,6 +61,19 @@ _DEFAULT_VIEWPORT = (1280, 900)
 
 def _timestamp_dir() -> str:
     return datetime.now(_KST).strftime("%Y-%m-%dT%H-%M-%S")
+
+
+def _chmod_0o600(path: Path) -> None:
+    """PII 가능성 있는 산출물을 ``0o600`` 으로. Windows / 권한 없는 fs 는 noop.
+
+    ``save_session`` / ``write_session_file`` 의 동일 정책을 bootstrap 산출물
+    (cookies / storage_state / HAR / meta) 에도 적용한다. 실제 PII 가 들어갈
+    수 있는 파일들 (특히 HAR: ID/PW 인증 시 비밀번호·RRN 7자리 포함 가능).
+    """
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def _import_playwright() -> Any:
@@ -202,6 +216,10 @@ class CaptureSession:
                 self._pw.stop()
         except Exception:
             pass
+        # HAR 은 context.close() 직후 finalize 된다. 그 시점 이후에야 정상적인
+        # chmod 가능 (Playwright 가 쓰는 중에는 호출 안 함).
+        if self.record_har and self._har_path.exists():
+            _chmod_0o600(self._har_path)
 
     # ------------------------------------------------------------------ #
     # 접근자                                                              #
@@ -311,7 +329,9 @@ class CaptureSession:
             json.dumps(cookies, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        _chmod_0o600(cookies_path)
         self.context.storage_state(path=str(storage_path))
+        _chmod_0o600(storage_path)
 
         meta = {
             "started_at": self._started_at,
@@ -326,6 +346,7 @@ class CaptureSession:
             json.dumps(meta, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        _chmod_0o600(meta_path)
 
         result: dict[str, Path] = {
             "output_dir": self.output_dir,

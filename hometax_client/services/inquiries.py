@@ -12,11 +12,38 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .. import facts
+from ..exceptions import ResponseSchemaDriftError
 from ..models import IncomeStatement, TaxFiling
 from ._base import ServiceBase
 
 if TYPE_CHECKING:
     pass
+
+
+def _require_list(
+    data: dict[str, Any],
+    key: str,
+    *,
+    action_id: str,
+) -> list[Any]:
+    """응답 dict 에서 list key 를 추출. 키 자체 없으면 drift.
+
+    홈택스가 빈 결과를 "키 있고 빈 리스트" 로 보내든 "키 없음" 으로 보내든,
+    "키 없음" 은 응답 구조 변경 신호이므로 silent 흡수하지 않는다 — 자료가
+    실제로 0건일 때와 라이브러리가 모르는 구조 변경을 구분하기 위함.
+    """
+    if key not in data:
+        raise ResponseSchemaDriftError(
+            action_id=action_id, missing=[key], raw=data,
+        )
+    value = data.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ResponseSchemaDriftError(
+            action_id=action_id, missing=[f"{key} (list 가 아님)"], raw=data,
+        )
+    return value
 
 
 class InquiryService(ServiceBase):
@@ -60,7 +87,9 @@ class InquiryService(ServiceBase):
             host=spec["host"],
             body=body,
         )
-        items = data.get(spec["items_key"]) or []
+        items = _require_list(
+            data, spec["items_key"], action_id=spec["action_id"],
+        )
         return [IncomeStatement.from_dict(item) for item in items]
 
     # ------------------------------------------------------------------ #
@@ -95,7 +124,9 @@ class InquiryService(ServiceBase):
             host=spec["host"],
             body=body,
         )
-        items = data.get(spec["items_key"]) or []
+        items = _require_list(
+            data, spec["items_key"], action_id=spec["action_id"],
+        )
         return [TaxFiling.from_dict(item) for item in items]
 
     # ------------------------------------------------------------------ #

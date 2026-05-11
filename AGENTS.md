@@ -6,19 +6,60 @@
 
 `hometax-agent-client` 는 홈택스(`hometax.go.kr`) `wqAction.do` 의 **HTTP 캡처-리플레이 라이브러리**다. 브라우저를 띄우지 않고 (단, 부트스트랩용 Playwright 는 `[bootstrap]` extras 에 옵션) 세션 쿠키 + HMAC 서명만으로 호출한다. AI 에이전트가 다중 고객의 세무 자료를 안전하게 읽고/처리할 수 있게 한다.
 
-## 작업 전 반드시 확인
+## 작업 전 반드시 확인 — 시작점 매트릭스
 
-| 문서 | 목적 |
-| --- | --- |
-| `docs/architecture.md` | 두 층 API (`client.<service>.<method>` vs `wq_action`) / 라이브러리 vs 워크플로 경계 |
-| `docs/conventions.md` | 와이어 키 무변형 / 영문 snake_case 한 곳 / 명명 (`*Service`/`*Result`/`*Error`) |
-| `docs/extending.md` | 새 조회/서비스 추가 체크리스트 |
-| `docs/compatibility.md` | 안정성 컨트랙트 — 깨면 major bump |
-| `docs/hometax-facts.md` | 캡처로 검증된 홈택스 식별자 단일 출처 |
-| `docs/sessions.md` | `SessionStore` 다중 세션 관리 |
-| `docs/recon.md` | `[bootstrap]` Playwright 리콘 도구 |
+어떤 작업이든 시작하기 전에 자기 작업이 어디에 해당하는지 먼저 확인. 잘못된
+문서부터 읽기 시작하면 컨텍스트만 낭비된다. 막힐 때는 "막힐 때 fallback" 의 docs.
 
-읽지 않고 만지면 디자인 컨트랙트가 깨진다.
+| 작업 종류 | 진입점 (코드) | 봐야 할 docs (순서) | 막힐 때 fallback |
+| --- | --- | --- | --- |
+| 사용자 자연어 요청 처리 (조회 / 인증 / 만료 안내) | `client.<service>.<method>` 또는 `client.wq_action(...)` | `README.md` §주요 특징 → `docs/architecture.md` (두 층 API) → 해당 service docstring | `hometax_client/exceptions.py` (에러 분기) + `docs/sessions.md` |
+| 새 조회 / service 추가 | `services/<area>.py` + `facts/current.toml` | `docs/extending.md` → `docs/hometax-facts.md` → `docs/conventions.md` | `docs/recon.md` (캡처로 wire 검증) |
+| 응답 드리프트 / 새 필드 출현 | `models.raw`, `ResponseSchemaDriftError` | `docs/compatibility.md` → `docs/conventions.md` | `docs/hometax-facts.md` (검증 사실 단일 출처) |
+| 새 인증 방식 추가 (NPKI 등) | `auth/<provider>.py` | `docs/extending.md` → `docs/recon.md` → `docs/hometax-facts.md` §pubcLogin | `bootstrap` 으로 직접 캡처 후 재검증 |
+| 다중 세션 운영 (세무사 다중 고객) | `SessionStore` | `docs/sessions.md` | `hometax_client/exceptions.py` (만료/권한 분기) |
+| 새 메뉴 발견 / 분석 | `bootstrap.CaptureSession` + `iter_wq_actions` | `docs/recon.md` | `docs/hometax-facts.md` §주의사항 |
+| `NTS_KEYS` 회전 / 서명 알고리즘 변경 | `python -m hometax_client.health` | `hometax_client/crypto.py` docstring | `tests/test_crypto.py` (알고리즘 회귀) |
+
+읽지 않고 시작하면 잘못된 문서에서 헤매기 쉽다. 작업 종류가 위에 없으면
+사용자에게 한번 더 명확히 묻고 시작.
+
+## PR 기여 (외부 / 에이전트)
+
+라이브러리 코어와 `examples/` 의 책임 경계를 다르게 적용한다.
+
+**라이브러리 코어 (`hometax_client/`) — 흡수**
+
+- 새 service / 새 조회 (`services/<area>.py` + `facts/current.toml`)
+- 새 인증 방식 (`auth/<provider>.py`)
+- `facts/current.toml` 갱신 (action ID / 화면 ID 변경 대응)
+- 에러 분류 개선 (`HometaxError` 하위 계층)
+- bug fix / regression test 픽스처 (PII 마스킹된 것만)
+
+**라이브러리 코어 — 거절. `examples/` 로는 환영**
+
+- 파일 IO (PDF/Excel/CSV 저장, 파일명 생성, 디스크 폴더 규칙)
+- 로컬 UI / 웹서버
+- 한국어 stemming / 자연어 매핑
+- 배치 / 진행률 / 다중 고객 자동화
+- 윈도우 `.bat` / `.ps1` (코어는 cross-platform Linux 우선, `examples/` 는 OS 별 환영)
+
+**`examples/` 가드레일** ([`examples/README.md`](examples/README.md))
+
+1. demo 1개 = 한 파일. 부풀려진 모놀리식 거절 (3,000줄 짜리 웹 앱 클라이언트 같은 것).
+2. 외부 의존성은 최대한 축소하며 반드시 필요하면 `pyproject.toml` `[examples]` extra 로 격리. 코어 `dependencies` 에 추가 금지.
+3. PII 출력 위치 / 마스킹 / 권한 (`0o600` 권장) 명시.
+4. `examples/README.md` 인덱스 갱신 (외부 contributor 진입점).
+5. 라이브러리 API 변경에 깨지지 않는지 import 가능성만은 검증.
+
+**PR 공통 체크리스트**
+
+- 시작점 매트릭스의 해당 작업 행 docs 모두 통과.
+- `ruff check hometax_client/ examples/ tests/` 통과.
+- 새 로직은 픽스처 기반 테스트 (실제 PII 없음).
+- 캡처 / 응답 본문에 실제 PII (RRN / TIN / 사번 / 사무실 정보) 없음 재확인.
+
+정식 `CONTRIBUTING.md` + PR / Issue template 은 public 전환 직전에 별도 작업.
 
 ## 실행 명령
 
