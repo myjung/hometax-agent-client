@@ -443,32 +443,76 @@ POST body 끝에 일관 등장:
 | 비회원 종소세 신고도움 진입 screen | `UTERNAAZ0Z11` | 회원의 `UTERNAAT32` 와 다름 |
 | 비회원 종소세 진입 actions | `ATERNABA244R06`, `ATERNABA244R07` | 회원의 `ATERNABA134R02` (filing_help) 와 다른 prefix (244 vs 134) |
 
+### sessionMap shape — 회원과 거의 동일 (단 권한은 다름)
+
+`permission.do?screenId=UTXPPBAC65` 응답의 sessionMap 은 회원 흐름과
+**필드 구성이 거의 같다** (`userId / tin / txprDscmNo` 등이 다 채워짐).
+다만 라이브 호출로 확인된 결과 **권한 범위는 회원과 다르다** (아래
+§"비회원 권한 매핑" 참조).
+
 ### sessionMap 의 회원/비회원 분기 필드 (가설)
 
-`permission.do?screenId=UTXPPBAC65` 응답 sessionMap (본인 명의 비회원 통과 후) — **userId / tin / txprDscmNo 등 회원과 사실상 동일하게 채워짐**. 즉 비회원 로그인은 "회원이 아닌 사람도 본인 자료를 보는 진입점" 으로 동작하며, 결과 세션은 회원과 거의 같은 권한을 가진다.
+다음 필드들의 비회원 캡처값. **회원 e2e 와 비교가 끝나지 않아 어느 필드가
+진짜 분기 신호인지 미확정**.
 
 | 필드 | 비회원 캡처값 | 회원 e2e 비교 (미수집) | 비고 |
 |---|---|---|---|
-| `lgnUserClCd` | `"02"` | (수집 필요) | **회원/비회원 분기 1순위 후보** |
-| `lgnCertCd` | `"01"` | (수집 필요) | 인증 수단 코드 |
+| `lgnUserClCd` | `"02"` | (수집 필요) | **분기 1순위 후보**. hometax-scraper 에 흔적 없음 → 비회원 흐름에서 새로 보인 신호 |
+| `lgnCertCd` | `"01"` | (수집 필요) | 인증 수단 코드 (카카오) |
 | `athGrpCd` | `"0000005"` | (수집 필요) | 인증 그룹 |
-| `userClsfCd` | `"01"` | (수집 필요) | 사용자 분류 — 비회원 표식 후보 |
-| `txprClsfCd` | `"01"` | (수집 필요) | 납세자 분류 |
 | `haboCl` | `"Z"` | (수집 필요) | — |
 
-다음 회원 e2e (`recon_e2e_naver.py` 또는 `auth_kakao.py`) 캡처에서 위 6개 필드를 비교해야 분기 필드가 확정된다.
+다음 필드는 **분기 신호가 아니라 wqAction body 에 forward 되는 단순
+분류 코드**. 옛 `hometax-scraper` (`user.py:361,383`) 의 수임동의
+(`ATEABHAA001U05`) 호출에서 `permission` 응답의 `userClsfCd` 를 그대로
+다음 요청 body 에 전달하는 패턴이 강한 증거.
+
+| 필드 | 비회원 캡처값 | 용도 |
+|---|---|---|
+| `userClsfCd` | `"01"` | 사용자 분류 — wqAction 호출 시 forward |
+| `txprClsfCd` | `"01"` | 납세자 분류 — wqAction 호출 시 forward |
+
+### 비회원 권한 매핑 (라이브 검증 2026-05-11)
+
+`captures/2026-05-11T13-38-50/cookies.json` 으로 1시간 후 라이브 호출
+시도한 결과:
+
+| 메뉴 / 호출 | 비회원 권한 |
+|---|---|
+| 종소세 신고도움 (`teht` / `UTERNAAT32` / `ATERNABA134R02`) | ✓ 가능 |
+| 보험료 조회 (`teht` / `insurance_taxpayer_action`) | ✓ 가능 |
+| 세적 기본 단건 조회 (`hometax` / `taxpayer_basic_info`) | ✓ 가능 |
+| `income_tax.address_candidates(...)` 묶음 호출 | ✓ 10건 후보 + 3개 source 통과 |
+| **지급명세서 조회 (`hometax` / `UTXPPBAA48` / `ATXPPBAA001R16`)** | **✗ "권한이 없는 화면입니다" (code `0000005,|+|0000001`)** |
+| **세금신고내역 (`hometax` / `UTXPPBAA47` / `ATXPPBAA001R15`)** | **✗ 같은 메시지** |
+| 대민사용자 기본정보조회 (`UTXPPBBA20` / `ATXPPAAA001R22`) | ✗ 추가 인증 필요 (`address_candidates` 의 skip 분기) |
+
+결론: 비회원 세션은 **종소세 신고 준비에 필요한 일부 메뉴만 접근 가능**.
+지급명세서 / 세금신고내역 등은 회원 권한 필요. **"비회원 = 회원과 거의
+같은 권한" 가설은 폐기**.
 
 ### 미해결 / 추정
 
 - **`TMPR_MAIN` cookie 출처**: dump 시점 cookies.json 에 존재하지만 HAR 의 어떤 응답 set-cookie 헤더에도 등장 안 함. §15 와 동일하게 페이지 JS 의 `document.cookie` 로 set 되는 메타 cookie 추정 (시그니처 cookie 아님).
 - **`pubcLogin.do` body 의 정확한 encoding**: 회원과 같은 endpoint 인데 body 가 ~3KB 의 영숫자 문자열. nts_encrypt 와 다른 별도 client-side 인코딩 가능성. 회원 흐름과의 body 비교 + JS 분석 필요.
 - **`/userAthEvtxMenuUtil`**: 인증 endpoint 가 아니라 **메뉴 카탈로그 fetch**. body `type=0` (익명용) → `type=10` (인증 후 비회원 12개 메뉴). 회원도 같은 endpoint 호출.
+- **`ATERNABA244R06` vs `R07` 의 역할 분담**: 비회원 진입 시 둘 다 발동. R06 / R07 의 차이 미확인 — 메뉴 1개만 클릭한 미니 캡처로 분리 관찰 필요.
 
 ### 라이브러리 함의 (구현은 다음 세션)
 
-- 비회원 흐름이 사실상 회원과 같은 endpoint / 같은 sessionMap shape 라 별도 클래스 부담이 작다 — 기존 OACX 흐름 + `pubcLogin` 호출 시 비회원 파라미터만 추가하면 될 가능성.
-- 분기 필드 (`lgnUserClCd` 등) 가 확정되면 `SessionInfo` 모델에 typed 표현 추가 후보. 단 자료 0건일 때 `null` 가능성도 wire 검증 필요.
-- 진입 메뉴별 action_id (`ATERNABA244R06/R07`) 는 회원과 분리되어 있어 `facts/current.toml` 에 별도 entry 가 적절.
+- 비회원도 회원과 같은 endpoint / 같은 sessionMap shape 라 별도 클래스
+  부담은 작다 — 기존 OACX 흐름 + `pubcLogin` 호출 시 비회원 파라미터만
+  추가하면 될 가능성. **단 `pubcLogin.do` body encoding 분석이 선행
+  조건**.
+- 호출 시 권한 부족 시 받는 응답 (`권한이 없는 화면입니다` /
+  `0000005,|+|0000001`) 이 현재 `SessionExpiredError` 로 분류됨 →
+  **classify_failure 의 분기 개선 후보** (P1 신규). 권한 부족과 실제 만료
+  구분되어야 호출자가 적절히 분기.
+- 진입 메뉴별 action_id (`ATERNABA244R06/R07`) 는 회원과 분리되어 있어
+  `facts/current.toml` 에 별도 entry 가 적절 (이미 등록됨).
+- `SessionInfo` 에 typed 비회원 표시 추가는 분기 필드 확정 (`lgnUserClCd`
+  등) 후. 라이브러리 사용자가 "이 세션이 비회원인지" 판단할 수 있어야
+  권한 없는 메뉴 호출 전에 짧게 거를 수 있음.
 
 ---
 
