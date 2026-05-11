@@ -12,12 +12,17 @@
 
     uv run --env-file .env python examples/recon_e2e_naver.py
 
+Playwright 번들 chromium 이 OS 빌드를 못 가지면 시스템 Chrome 사용:
+
+    .venv/bin/python examples/recon_e2e_naver.py --channel chrome
+
 산출물: ``captures/naver-e2e/`` 하위 (cookies / storage_state / HAR / meta).
 ``.gitignore`` 됨.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -34,6 +39,18 @@ def _log(msg: str) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--channel",
+        default=os.environ.get("RECON_CHANNEL"),
+        help=(
+            "Playwright channel (예: 'chrome' / 'msedge'). 미지정 시 번들 "
+            "chromium. Ubuntu 26.04 같이 OS 전용 번들이 없는 환경에선 "
+            "'chrome' 권장 (`RECON_CHANNEL` env 도 가능)."
+        ),
+    )
+    args = parser.parse_args()
+
     name = os.environ.get("HOMETAX_NAME")
     phone = os.environ.get("HOMETAX_PHONE")
     birthday = os.environ.get("HOMETAX_BIRTH")
@@ -66,11 +83,14 @@ def main() -> int:
     client.export_storage_state(storage_state_path)
     _log(f"[e2e] 2/4 storage_state → {storage_state_path}")
 
-    _log("[e2e] 3/4 Playwright (headless) 로 홈택스 메인 진입")
+    _log(
+        f"[e2e] 3/4 Playwright (headless, channel={args.channel!r}) 로 메인 진입",
+    )
     with CaptureSession(
         storage_state=storage_state_path,
         output_dir=OUTPUT_DIR,
         headed=False,
+        channel=args.channel,
     ) as cap:
         cap.page.goto("https://hometax.go.kr/", wait_until="load")
         try:

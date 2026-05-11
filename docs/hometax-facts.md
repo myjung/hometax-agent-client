@@ -424,6 +424,54 @@ POST body 끝에 일관 등장:
 
 ---
 
+## 16. 비회원 로그인 흐름 (브라우저 캡처)
+
+검증일: 2026-05-11 / 출처: `captures/2026-05-11T13-38-50/trace.har`
+(사용자 본인 명의 이름 + RRN, 카카오 OACX, Chrome 148 via Playwright
+`--channel chrome`, `recon_login.py` 익명 시작).
+
+홈택스 메인 → "로그인" → **비회원 로그인 탭 (`UTXPPBAC65`)** 에서 이름 +
+주민번호 입력 후 카카오 인증 통과한 흐름.
+
+### 핵심 식별자
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 비회원 로그인 진입 screen | `UTXPPBAC65` | 메뉴명 "비회원로그인", `childCount:12` (비회원 사용 가능 메뉴 12개) |
+| 본인인증 endpoint | `/oacx/api/v1.0/*` | 회원 OACX 와 **동일** (`trans`, `authen/request`, `authen/result`) |
+| 세션 발급 endpoint | `POST /pubcLogin.do?domain=hometax.go.kr&mainSys=Y` | 회원 ID/PW 와 **동일 endpoint**. body 는 암호화된 단일 문자열 (~3KB) — 평문 RRN/이름 없음. nts_encrypt 류 인코딩 추정 |
+| 비회원 종소세 신고도움 진입 screen | `UTERNAAZ0Z11` | 회원의 `UTERNAAT32` 와 다름 |
+| 비회원 종소세 진입 actions | `ATERNABA244R06`, `ATERNABA244R07` | 회원의 `ATERNABA134R02` (filing_help) 와 다른 prefix (244 vs 134) |
+
+### sessionMap 의 회원/비회원 분기 필드 (가설)
+
+`permission.do?screenId=UTXPPBAC65` 응답 sessionMap (본인 명의 비회원 통과 후) — **userId / tin / txprDscmNo 등 회원과 사실상 동일하게 채워짐**. 즉 비회원 로그인은 "회원이 아닌 사람도 본인 자료를 보는 진입점" 으로 동작하며, 결과 세션은 회원과 거의 같은 권한을 가진다.
+
+| 필드 | 비회원 캡처값 | 회원 e2e 비교 (미수집) | 비고 |
+|---|---|---|---|
+| `lgnUserClCd` | `"02"` | (수집 필요) | **회원/비회원 분기 1순위 후보** |
+| `lgnCertCd` | `"01"` | (수집 필요) | 인증 수단 코드 |
+| `athGrpCd` | `"0000005"` | (수집 필요) | 인증 그룹 |
+| `userClsfCd` | `"01"` | (수집 필요) | 사용자 분류 — 비회원 표식 후보 |
+| `txprClsfCd` | `"01"` | (수집 필요) | 납세자 분류 |
+| `haboCl` | `"Z"` | (수집 필요) | — |
+
+다음 회원 e2e (`recon_e2e_naver.py` 또는 `auth_kakao.py`) 캡처에서 위 6개 필드를 비교해야 분기 필드가 확정된다.
+
+### 미해결 / 추정
+
+- **`TMPR_MAIN` cookie 출처**: dump 시점 cookies.json 에 존재하지만 HAR 의 어떤 응답 set-cookie 헤더에도 등장 안 함. §15 와 동일하게 페이지 JS 의 `document.cookie` 로 set 되는 메타 cookie 추정 (시그니처 cookie 아님).
+- **`pubcLogin.do` body 의 정확한 encoding**: 회원과 같은 endpoint 인데 body 가 ~3KB 의 영숫자 문자열. nts_encrypt 와 다른 별도 client-side 인코딩 가능성. 회원 흐름과의 body 비교 + JS 분석 필요.
+- **`/userAthEvtxMenuUtil`**: 인증 endpoint 가 아니라 **메뉴 카탈로그 fetch**. body `type=0` (익명용) → `type=10` (인증 후 비회원 12개 메뉴). 회원도 같은 endpoint 호출.
+
+### 라이브러리 함의 (구현은 다음 세션)
+
+- 비회원 흐름이 사실상 회원과 같은 endpoint / 같은 sessionMap shape 라 별도 클래스 부담이 작다 — 기존 OACX 흐름 + `pubcLogin` 호출 시 비회원 파라미터만 추가하면 될 가능성.
+- 분기 필드 (`lgnUserClCd` 등) 가 확정되면 `SessionInfo` 모델에 typed 표현 추가 후보. 단 자료 0건일 때 `null` 가능성도 wire 검증 필요.
+- 진입 메뉴별 action_id (`ATERNABA244R06/R07`) 는 회원과 분리되어 있어 `facts/current.toml` 에 별도 entry 가 적절.
+
+---
+
 ## 갱신 이력
 
 본 카탈로그의 변경은 git log 에 남는다 (별도 changelog 미운영).

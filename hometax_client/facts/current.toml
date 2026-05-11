@@ -94,3 +94,20 @@ action_id = "AWEICAAA028R07"
 host = "hometax"
 screen_id = "UTXPPBAD23"
 action_id = "ATTABZAA001R01"
+
+# ------------------------------------------------------------------ #
+# Guest login (비회원 로그인 — 이름 + RRN + OACX)                       #
+#                                                                      #
+# 회원 흐름과 같은 /pubcLogin.do / OACX endpoint 를 공유한다. 회원과 분리   #
+# 된 식별자만 별도 등록 (진입 화면 + teht 비회원 진입 액션).               #
+# 검증일: 2026-05-11. docs/hometax-facts.md §16 참조.                  #
+# ------------------------------------------------------------------ #
+
+[auth.guest]
+login_screen_id = "UTXPPBAC65"
+
+[services.guest.income_tax]
+host = "teht"
+screen_id = "UTERNAAZ0Z11"
+# 두 액션 — 첫 진입 시 둘 다 발동. R06 / R07 의 역할 분담 미확인 (다음 캡처).
+entry_actions = ["ATERNABA244R06", "ATERNABA244R07"]
