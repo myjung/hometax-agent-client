@@ -128,7 +128,7 @@ class CapitalGainsService(ServiceBase):
         self,
         attr_year: int | str,
     ) -> dict[str, Any]:
-        """raw 통로 — typed 뷰 대신 응답 dict 통째로 반환."""
+        """저수준 직접 호출 — typed 뷰 대신 응답 dict 통째로 반환."""
         spec = facts.lookup("services", "capital_gains")
         tin = self._ensure_tin()
         self._c.activate_subsystem_session(

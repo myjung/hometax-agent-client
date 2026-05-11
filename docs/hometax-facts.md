@@ -532,7 +532,7 @@ obfuscate 한 form**. value 도 client-side 암호화. 회원 form 의 의미적
 발급. 라이브 검증: 비회원 OACX 세션으로 신고안내문 PDF 4년치 (2021~2024)
 모두 5페이지 ~200KB. ``%PDF-1.4`` magic header 정상.
 
-라이브러리 surface: ``client.income_tax.filing_help_pdf(year)`` / ``report_pdf(year)``
+라이브러리 공개 API: ``client.income_tax.filing_help_pdf(year)`` / ``report_pdf(year)``
 → ``ClipReportResult(status, pdf, page_count, report_key, message, raw_html)``.
 ``status`` 분기: ``"found"`` / ``"empty"`` (reportkey 또는 page count 없음) /
 ``"failed"`` (HTTP 실패).

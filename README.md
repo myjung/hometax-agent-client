@@ -17,22 +17,22 @@ optional and isolated to the `[bootstrap]` extras.
 
 ## 주요 특징
 
-- **HTTP-only 데이터 평면.** 라이브러리 본체는 `curl_cffi` 위에서 동작하며
-  Playwright 같은 브라우저 의존을 코어에서 제거했다. 인증 부트스트랩이
-  필요할 때만 `[bootstrap]` extras 를 설치한다.
-- **두 층 API.** `client.<service>.<method>()` 로 typed 결과를 받거나,
-  `client.wq_action(...)` raw 통로로 직접 호출할 수 있다. 홈택스가 응답
-  shape 을 바꿔도 raw 통로로 즉시 우회 가능.
-- **Drift-tolerant 모델.** 모든 dataclass 가 `raw` 를 들고 있어, 라이브러리가
-  알지 못하는 새 필드도 보존된다. 응답 핵심 필드가 사라진 경우는
-  `ResponseSchemaDriftError` 로 raise.
-- **Facts as data.** 액션 ID, 화면 ID 같은 식별자는
-  `hometax_client/facts/current.toml` 에 데이터로 분리해 두어, 코드 변경
-  없이 catalog 만 갱신하면 된다.
-- **타입화된 에러 계층.** 모든 라이브러리 예외가 `HometaxError` 를 상속.
+- **HTTP 통신만 사용.** 라이브러리 코어는 `curl_cffi` 위에서 동작하며
+  Playwright 같은 브라우저 의존이 없다. 인증 부트스트랩이 필요할 때만
+  `[bootstrap]` extras 를 설치한다.
+- **고수준 / 저수준 두 단계 API.** `client.<service>.<method>()` 로 타입화된
+  결과를 받거나, `client.wq_action(...)` 으로 raw 응답을 직접 받을 수 있다.
+  홈택스가 응답 형식을 바꿔도 raw 호출로 즉시 우회 가능.
+- **응답 변경 내성.** 모든 dataclass 가 `raw` 필드를 보유 — 라이브러리가
+  알지 못하는 새 필드도 보존된다. 응답 핵심 필드가 사라지면
+  `ResponseSchemaDriftError` 를 발생.
+- **식별자 데이터 분리.** 액션 ID, 화면 ID 같은 식별자는
+  `hometax_client/facts/current.toml` 에 데이터로 분리. 코드 변경 없이
+  카탈로그 한 줄 수정으로 정정 가능.
+- **타입화된 예외 계층.** 모든 라이브러리 예외가 `HometaxError` 를 상속.
   `SessionExpiredError`, `LoginRequiredError`, `ProtectedLoginError`,
-  `AuthGradeInsufficientError` 등으로 세분화되어 agent 가 string 매칭 없이
-  분기 가능.
+  `AuthGradeInsufficientError`, `PermissionDeniedError` 등으로 세분화되어
+  호출자가 문자열 매칭 없이 분기 가능.
 - **다중 세션 관리.** `SessionStore` 한 디렉토리에 여러 고객 세션을
   `<client_id>.json` 으로 보관. list / open / health / find_by_tin 등
   일관 API. 세무사 사무실 다중 클라이언트 워크플로용
@@ -97,7 +97,7 @@ for statement in statements:
 income = client.income_tax.income_details(attr_year=2024)
 ```
 
-### 2. ID/PW 직접 로그인 (위험: 보호 스크립트 변경에 영향)
+### 2. ID/PW 직접 로그인 (주의: 2026-05 보호 스크립트 변경에 영향받음)
 
 ```python
 from hometax_client import HometaxClient
@@ -111,14 +111,14 @@ auth = IdPwAuth(
 client = HometaxClient.login(auth=auth)
 ```
 
-`pubcLogin.do` 가 HTTP 400 또는 partial 세션을 반환할 경우
-`ProtectedLoginError` 가 raise 된다. 이때는 부트스트랩 경로 또는 OACX 인증을
+`pubcLogin.do` 가 HTTP 400 또는 부분만 발급된 세션을 반환할 경우
+`ProtectedLoginError` 가 발생한다. 이때는 부트스트랩 도구 또는 OACX 인증을
 사용해야 한다.
 
-### 3. Raw 통로 (escape hatch)
+### 3. 저수준 직접 호출 (escape hatch)
 
-홈택스가 새 메뉴를 추가했거나 라이브러리가 아직 따라가지 못한 응답이라면
-직접 `wq_action()` 으로 호출 가능.
+홈택스가 새 메뉴를 추가했거나 라이브러리에 아직 typed 서비스가 없는 응답이라면
+`wq_action()` 으로 직접 호출 가능.
 
 ```python
 data = client.wq_action(
@@ -157,8 +157,8 @@ health = store.health("kim_chulsoo")      # 'recent' / 'stale' / 'missing'
 - 홈택스 이용약관, 정보통신망법, 개인정보보호법, 그 외 관련 법규 준수
   여부는 사용자가 자체 판단한다. 본 라이브러리 사용에 따른 모든 법적 / 운영
   위험은 사용자에게 있다.
-- raw 통로 (`wq_action`) 로 임의 액션 호출이 기술적으로 가능하다 — 호출
-  결과 / 영향 / 적법성은 사용자 책임.
+- `wq_action()` 으로 임의 액션 호출이 기술적으로 가능하다 — 호출 결과 /
+  영향 / 적법성은 사용자 책임.
 
 ## 보안 / 자격증명
 
@@ -186,8 +186,8 @@ health = store.health("kim_chulsoo")      # 'recent' / 'stale' / 'missing'
 
 ## 프로젝트 문서
 
-- [`docs/architecture.md`](docs/architecture.md) — 두 층 API, 의존성 정책,
-  라이브러리 vs 워크플로 경계
+- [`docs/architecture.md`](docs/architecture.md) — 고수준 / 저수준 두 단계
+  API, 의존성 정책, 라이브러리 vs 워크플로 경계
 - [`docs/conventions.md`](docs/conventions.md) — 모듈/클래스/메서드/예외
   네이밍 규약
 - [`docs/extending.md`](docs/extending.md) — 새 세목(법인세/원천세/양도세

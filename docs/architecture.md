@@ -12,18 +12,18 @@
    반환한다. 파일 IO, PDF/Excel 렌더링, 한국어 stem 같은 워크플로 책임은
    라이브러리에 들이지 않는다 (그 책임은 호출 측 또는 별도 워크플로
    패키지가 진다).
-3. **두 층 API.** typed 편의 메서드(`client.<service>.<method>()`) 와 raw
-   통로(`client.wq_action(...)`) 를 같이 노출한다. 홈택스가 응답 shape 을
-   바꿔도 호출자가 raw 통로로 즉시 우회할 수 있다.
-4. **응답 무변형 보존.** 응답 dict 의 키 이름은 홈택스 와이어 그대로(예:
+3. **고수준 / 저수준 두 단계 API.** 타입화된 편의 메서드
+   (`client.<service>.<method>()`) 와 저수준 직접 호출
+   (`client.wq_action(...)`) 을 같이 노출한다. 홈택스가 응답 형식을 바꿔도
+   호출자가 저수준 호출로 즉시 우회할 수 있다.
+4. **응답 무변형 보존.** 응답 dict 의 키 이름은 홈택스 와이어 그대로 (예:
    `attrYr`, `txprDscmNo`, `lvyRperTin`) 보존한다. dataclass 도 항상
-   `raw` 필드를 들고 있어 라이브러리가 모르는 새 필드까지 호출자에게
-   노출된다.
-5. **타입화된 에러.** 모든 라이브러리 예외는 `HometaxError` 를 상속.
-   string 매칭에 의존하지 않고 `except SessionExpiredError` 같이 분기
-   가능.
-6. **Facts as data.** 액션 ID, 화면 ID 같은 식별자는 `current.toml` 에
-   분리. 코드 변경 없이 catalog 만 업데이트할 수 있다.
+   `raw` 필드를 보유 — 라이브러리가 모르는 새 필드까지 호출자에게 노출된다.
+5. **타입화된 예외.** 모든 라이브러리 예외는 `HometaxError` 를 상속.
+   문자열 매칭에 의존하지 않고 `except SessionExpiredError` 같이 타입으로
+   분기 가능.
+6. **식별자 데이터 분리.** 액션 ID, 화면 ID 같은 식별자는 `current.toml`
+   에 분리. 코드 변경 없이 카탈로그 한 줄 수정으로 정정할 수 있다.
 
 ## 패키지 구조
 
@@ -52,18 +52,18 @@ hometax_client/
     └── __init__.py         # 로더
 ```
 
-## 두 층 API
+## 고수준 / 저수준 두 단계 API
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  Caller / Agent                                                  │
 │                                                                  │
-│   client.inquiries.income_statements(2024)   typed 편의 (안정)    │
+│   client.inquiries.income_statements(2024)   타입화된 편의 (안정)  │
 │   client.income_tax.income_details(2024)                         │
 │                                                                  │
 │   client.wq_action(action_id=..., screen_id=..., body=...)       │
 │                                                  ↑               │
-│                                       raw 통로 (escape hatch)    │
+│                                      저수준 직접 호출 (탈출구)      │
 ├──────────────────────────────────────────────────────────────────┤
 │  Service classes (services/*.py)                                 │
 │   - 응답 dict 을 dataclass / TypedDict 로 정리                     │

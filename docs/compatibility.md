@@ -11,7 +11,7 @@
 |---|---|
 | `HometaxClient` 의 public 메서드 시그니처 | 마이너 버전 안에서 호환 |
 | `client.<service>.<method>()` 시그니처 | 마이너 버전 안에서 호환 |
-| `wq_action(...)` raw 통로 | 메이저 버전 안에서 호환 |
+| `wq_action(...)` 저수준 직접 호출 | 메이저 버전 안에서 호환 |
 | `HometaxError` 계층 구조 | 메이저 버전 안에서 호환 |
 | typed 반환의 기존 필드 | 제거되지 않음 (값은 None 가능) |
 | typed 반환의 새 필드 추가 | 마이너 버전에서 가능 |
