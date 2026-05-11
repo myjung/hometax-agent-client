@@ -31,6 +31,7 @@ from ..exceptions import (
     WqActionFailedError,
 )
 from ._base import ServiceBase
+from ._clipreport import ClipReportResult, export_pdf_from_html
 
 if TYPE_CHECKING:
     pass
@@ -257,6 +258,51 @@ class IncomeTaxService(ServiceBase):
         """신고안내문 ClipReport 미리보기 HTML 반환."""
         data = self.filing_help_data(attr_year)
         return self._fetch_filing_help_html(str(attr_year), data)
+
+    def filing_help_pdf(
+        self, attr_year: int | str,
+    ) -> "ClipReportResult":
+        """신고안내문 공식 PDF bytes (ClipReport R09 export).
+
+        2단계: 미리보기 HTML → ``reportkey`` 추출 → ``ClipReport4/Clip.jsp``
+        R03 polling + R09 export. 결과의 ``status`` 분기:
+
+        - ``"found"``: ``result.pdf`` 가 PDF bytes.
+        - ``"empty"``: HTML 에 reportkey 없거나 page count 0 또는 R09 가
+          PDF 가 아닌 응답. 사용자 계정의 해당 연도 자료가 없는 정상 케이스.
+        - ``"failed"``: HTTP 4xx/5xx 등 wire 실패.
+
+        라이브러리는 PDF bytes 만 반환 — 디스크 저장 / 파일명 / 폴더 구조는
+        호출자 (워크플로) 책임 (라이브러리 정책).
+
+        라이브 검증 2026-05-11: 비회원 OACX 세션으로 5페이지 200KB PDF.
+        """
+        html = self.filing_help_html(attr_year)
+        return export_pdf_from_html(
+            self._c._session,
+            html,
+            file_name=f"filing_help_{attr_year}.pdf",
+        )
+
+    def report_pdf(
+        self,
+        attr_year: int | str,
+        *,
+        material_codes: str = "F0025,A0162,A0165",
+    ) -> "ClipReportResult":
+        """(간이/용역) 본인 소득내역 보고서 공식 PDF bytes.
+
+        ``report_html`` 의 HTML 응답에서 reportkey 추출 → ClipReport R03/R09.
+        분기 / 정책은 :meth:`filing_help_pdf` 와 동일.
+        """
+        bundle = self.report_html(
+            attr_year, material_codes=material_codes,
+        )
+        return export_pdf_from_html(
+            self._c._session,
+            bundle["html"],
+            file_name=f"income_report_{attr_year}.pdf",
+        )
 
     # ---------------- 보험료 ----------------
 

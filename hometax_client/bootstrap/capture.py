@@ -113,6 +113,13 @@ class CaptureSession:
         user_agent: str | None = None,
         locale: str = "ko-KR",
         storage_state: str | Path | None = None,
+        is_mobile: bool = False,
+        has_touch: bool = False,
+        screen: tuple[int, int] | None = None,
+        timezone_id: str | None = None,
+        ignore_https_errors: bool = False,
+        launch_args: tuple[str, ...] = (),
+        browser: str = "chromium",
     ) -> None:
         """
         Args:
@@ -138,6 +145,18 @@ class CaptureSession:
         self.viewport = viewport
         self.user_agent = user_agent
         self.locale = locale
+        self.is_mobile = is_mobile
+        self.has_touch = has_touch
+        self.screen = screen
+        self.timezone_id = timezone_id
+        self.ignore_https_errors = ignore_https_errors
+        self.launch_args = tuple(launch_args)
+        if browser not in {"chromium", "firefox", "webkit"}:
+            raise ValueError(
+                f"browser 는 'chromium' / 'firefox' / 'webkit' 중 하나 "
+                f"(받음: {browser!r})"
+            )
+        self.browser = browser
         self.storage_state = (
             Path(storage_state) if storage_state is not None else None
         )
@@ -170,8 +189,13 @@ class CaptureSession:
         self._pw = sync_playwright().start()
         launch_kwargs: dict[str, Any] = {"headless": not self.headed}
         if self.channel:
-            launch_kwargs["channel"] = self.channel
-        self._browser = self._pw.chromium.launch(**launch_kwargs)
+            # channel 은 chromium 만 지원 (chrome/msedge). firefox/webkit 무시.
+            if self.browser == "chromium":
+                launch_kwargs["channel"] = self.channel
+        if self.launch_args:
+            launch_kwargs["args"] = list(self.launch_args)
+        browser_type = getattr(self._pw, self.browser)
+        self._browser = browser_type.launch(**launch_kwargs)
 
         context_kwargs: dict[str, Any] = {
             "viewport": {
@@ -182,6 +206,18 @@ class CaptureSession:
         }
         if self.user_agent:
             context_kwargs["user_agent"] = self.user_agent
+        if self.is_mobile:
+            context_kwargs["is_mobile"] = True
+        if self.has_touch:
+            context_kwargs["has_touch"] = True
+        if self.screen is not None:
+            context_kwargs["screen"] = {
+                "width": self.screen[0], "height": self.screen[1],
+            }
+        if self.timezone_id:
+            context_kwargs["timezone_id"] = self.timezone_id
+        if self.ignore_https_errors:
+            context_kwargs["ignore_https_errors"] = True
         if self.storage_state is not None:
             # cookies + localStorage 복원. 세션 만료 시 홈택스가 로그인 페이지로
             # 리다이렉트하므로 호출자가 인지 가능.

@@ -322,26 +322,6 @@ POST body 끝에 일관 등장:
 `bldHoAdr`, `etcDadr`를 붙여 구성한다. 실제 고객 주소, ID, 비밀번호, 주민등록번호는
 문서에 저장하지 않는다.
 
-### 13.5 근로소득 원천징수영수증 PDF
-
-검증일: 2026-05-10 / 출처: 손택스 화면 소스와 라이브 ClipReport export.
-
-| 화면/action | 역할 |
-|------|------|
-| `UTBSFAAM10` | `지급명세서(원천징수영수증) 제출내역` 모바일 화면 |
-| `ATXPPBAA001R16` | 공식 제출내역 목록 조회. ID/PW 세션에서는 FWE로 거부됨 |
-| `ATERNABA152R01` | 근로소득 경정청구 흐름에서 지급명세서 식별자 조회 |
-| `ATERNABA151R01` | ID/PW 세션에서 실제 근로소득 지급명세서 상세 데이터 조회 |
-| `ATTSFAAA005R01` | 공식 제출건 중간 조회. ID/PW 세션에서는 FWE로 거부됨 |
-| `ATESFAAA011P01` | 근로소득 원천징수영수증/지급명세서 공식 ClipReport 양식 생성 |
-
-2024년 귀속 근로소득 기준 리포트 파일은 `/tt/sf/a/a/RTISFAAE81`, `con=RTISFAAE81`이다.
-`ATTSFAAA005R01`은 ID/PW 세션에서 FWE로 막히지만, `ATERNABA152R01`에서 얻은 행을
-`UTBSFAAM10`의 `bmanBscMttrAdmDVOList` 형태로 보강하면 `ATESFAAA011P01` 공식 ClipReport에
-값이 바인딩된다. 보강 필드는 `indvTin=ieTin`, `mateKndCd=A0051`, `myntsYn=Y`, `pblsRpt=N`,
-`mskApplcYn=Y`이다. 요청 연도가 아니라 행의 실제 `attrYr` 기준으로 리포트 파일을 선택해야 한다.
-샘플 검증 결과 공식 양식은 값이 들어간 3페이지 PDF, `Producer=iText 4.2.0 by 1T3XT`.
-
 ## 14. 자동화 가능/불가 현황
 
 | 영역 | 상태 | 비고 |
@@ -350,9 +330,8 @@ POST body 끝에 일관 등장:
 | 세션 복원 + SSO 토큰 자동 갱신 | ✓ 가능 | `cookies.json` 시작 + `refresh_session()` |
 | `nts_encrypt` 시간 기반 HMAC 서명 (현재 키셋) | ✓ 가능 | 7개 키 + userId mixin (`tests/test_crypto.py`). 키 source 는 `crypto.active_keys()` 가 env > cache > baseline 순서로 해석 |
 | NTS_KEYS 동적 fetch / drift 검출 / 자동 갱신 | ✓ 가능 | `python -m hometax_client.health [--refresh]` (CLI), `tests/test_keys_live.py` (`HOMETAX_LIVE=1` 게이트) |
-| 지급명세서 / 세금신고내역 조회 | ✓ 가능 | OACX 세션 기준 `client.inquiries.*` |
-| 근로소득 지급명세서 데이터 조회 | ✓ 가능 | ID/PW/주민번호 세션 + `ATERNABA151R01` 응답값 |
-| 근로소득 원천징수영수증 공식 PDF | ✓ 가능 | `ATERNABA152R01` 식별자 + `UTBSFAAM10` 공식 ClipReport 3페이지 원본 PDF |
+| 지급명세서 / 세금신고내역 조회 | ✓ 가능 | OACX 회원 / NPKI 등 상위 인증 등급 세션 기준 `client.inquiries.*` |
+| 신고도움 / 본 소득내역 공식 ClipReport PDF | ✓ 가능 | `client.income_tax.filing_help_pdf(year)` / `report_pdf(year)` — `sesw/clipreport.do` + R03/R09 HTTP-only |
 | Connection reset 자동 retry | ✓ 가능 | 라이브러리 내장 |
 | 신고/제출/저장 | ✗ 미구현 | 현재 미지원 — 향후 scope 확장 가능 |
 | NPKI 공인인증서 로그인 | ✗ 미구현 | 별도 클라이언트 필요 |
@@ -544,17 +523,74 @@ obfuscate 한 form**. value 도 client-side 암호화. 회원 form 의 의미적
 - **`facts/current.toml`** 의 `[auth.guest]` / `[services.guest.income_tax]` —
   비회원 진입 식별자 등록됨.
 
-**HTTP-only 직접 인증 (현재 미지원)** — `auth/guest_kakao.py` 같은 클래스로
-브라우저 없이 비회원 통과 구현은 다음 블로커:
+### ClipReport PDF export (HTTP-only, 2026-05-11)
 
-- 일반 `pubcLogin.do` 호출 흐름 (`common_biz.js`, `common_util.js` 의
-  `$.ajax({data: pJSON})`) 자체는 평문 form/JSON — obfuscation 없음.
-- 다만 **2026-05 보호 스크립트가 별도 layer 로 body 를 client-side
-  encrypt** (캡처 본문 `NLRoVo4=xtqr...` 형태). 호출 함수 자체가 아니라
-  intercept 레이어가 body 를 변환.
-- → 본 라이브러리에서 보호 스크립트의 변환 알고리즘 RE 가 진정한 블로커.
-  JS bundle 분석 시도했으나 의미적 키 → obfuscated 변환의 정확한 흐름
-  미확정. 현재 bootstrap 우회가 권장 진입.
+신고도움 / 신고안내문 / 자료구분별 본 소득내역 미리보기 HTML 응답에
+박혀있는 ``var reportkey = ...'uid':'<key>'...`` 토큰을 추출 →
+``POST /serp/ClipReport4/Clip.jsp`` (host: ``sesw.hometax.go.kr``) 의
+``R03`` (page count polling) + ``R09`` (PDF export bytes) 2단계로 PDF
+발급. 라이브 검증: 비회원 OACX 세션으로 신고안내문 PDF 4년치 (2021~2024)
+모두 5페이지 ~200KB. ``%PDF-1.4`` magic header 정상.
+
+라이브러리 surface: ``client.income_tax.filing_help_pdf(year)`` / ``report_pdf(year)``
+→ ``ClipReportResult(status, pdf, page_count, report_key, message, raw_html)``.
+``status`` 분기: ``"found"`` / ``"empty"`` (reportkey 또는 page count 없음) /
+``"failed"`` (HTTP 실패).
+
+**자료 없음 케이스의 실제 응답**: 사용자 계정에 해당 연도 자료가 없는 경우
+**대부분 ``"found"`` + 1페이지 PDF** 로 응답 (예: "자료가 없습니다" 인쇄된
+1페이지 PDF). 빈 응답이 아니라 의미있는 "자료 없음" 알림 PDF. 따라서
+``status="empty"`` 분기는 reportkey 미발급 / page count 0 / R09 가 PDF 가
+아닌 응답 같은 wire-level edge case 에 한정. 라이브 검증 2026-05-11
+회원 ID/PW 세션: ``report_pdf(2024)`` (소득 없음) = 1페이지 47KB PDF
+("자료 없음" 인쇄), ``report_pdf(2023/2022)`` 도 동일 1페이지.
+
+### 인증 등급별 권한 매트릭스 (라이브 검증 2026-05-11)
+
+| 메뉴 | 비회원 OACX | ID/PW + 주민번호 회원 |
+|---|---|---|
+| 신고도움 데이터 / PDF (``UTERNAAT32`` / ``ATERNABA134R02``) | ✓ | ✓ |
+| 자료구분별 본 소득내역 PDF (``UWEICZAA92`` / ``AWEICAAA034R01``) | ✗ PermissionDenied | ✓ (자료 없음도 1페이지 PDF) |
+| 보험료 (``UTERNAAD71`` / ``ATERNABA094R06``) | ✓ | ✓ |
+| address_candidates | ✓ | ✓ |
+| 지급명세서 (``UTXPPBAA48`` / ``ATXPPBAA001R16``) | ✗ PermissionDenied | ✗ AuthGradeInsufficient ("공인인증서로 로그인") |
+| 세금신고내역 (``UTXPPBAA47`` / ``ATXPPBAA001R15``) | ✗ PermissionDenied | ✗ PermissionDenied (``pubcPermission`` code, "휴대폰/신용카드 등 인증") |
+
+ID/PW 회원도 지급명세서/세금신고내역은 거부. OACX 회원 이상 인증 등급
+(또는 NPKI/공인인증서) 필요. 라이브러리는 호출자가 적절한 인증 등급으로
+세션을 발급한 상태를 가정한다.
+
+모바일 손택스 (``mob.hometax.go.kr`` 계열) 는 본 라이브러리 코어 범위 외 —
+별도 보호 layer + 별도 wire 형식 + 별도 세션이라 ``hometax_client`` 의
+데스크탑 cookies / ``wq_action`` wire 와 호환 불가.
+
+---
+
+**HTTP-only 직접 인증 (구현됨 + 라이브 검증 완료, 2026-05-11)** —
+`KakaoAuth(name=..., phone=..., birthday=..., ssn=...)` 처럼 `ssn` 인자를
+주면 비회원 모드로 분기.
+`hometax_client/auth/oacx.py` 의 `OACXAuth.is_guest`. 구현 시 핵심 발견:
+
+- 본 라이브러리는 `vtcPB` 의 XMLHttpRequest wrapper 를 로드하지 않아
+  평문 form 그대로 POST. 서버는 vtcPB-encrypted body 든 평문 form 이든
+  둘 다 받음 — vtcPB 는 client-side wrapper 일 뿐 서버 측 의무 사항 아님
+  (회원 OACX 가 이미 같은 path 로 동작 검증된 후 비회원도 같은 path 추론).
+- 비회원 흐름의 회원과의 유일한 의미적 차이 두 개:
+  1. `trans` 직전에 `POST /oacx/index.jsp` body
+     `popupType=layer&userType=R&ssn=<b64 13자리>&userName=<b64 이름>`
+     으로 server-side 에 ssn/이름 등록 (이후 `authen/request` 의 `ssn1/ssn2`
+     는 빈 채로 가도 server 가 txId 로 ssn 알고 있음).
+  2. `pubcLogin.do` body 에 `nMemberLoginYn=Y / txprNm=<raw 이름> /
+     ssn1=<b64 6자리> / ssn2=<b64 7자리>` 추가. JS 출처:
+     `UTXPPABA01.js` `fn_prcsLoginSimpleCallBack` 의
+     `scwin.nrgtMmbrSpmcCertYn` 분기.
+- `scrnId` 는 회원/비회원 모두 `UTXPPABA01` (페이지의 다른 탭에서 진입).
+- 비회원 캡처의 obfuscated `pubcLogin` body 는 vtcPB 가 위 평문 form 을
+  variable-key=base64(value) 형태로 client-side 변환한 결과. 본
+  라이브러리는 wrapper 자체를 로드하지 않으므로 변환 알고리즘 RE 불필요.
+
+`examples/auth_kakao_guest.py` 가 진입 demo. 1차 인증 라이브 검증 완료
+시 `KakaoAuth` 의 `ssn` 인자 docstring 에서 "라이브 검증" 표기.
 
 ---
 

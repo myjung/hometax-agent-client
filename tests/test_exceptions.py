@@ -90,6 +90,20 @@ def test_classify_auth_grade_for_short_cert_phrase() -> None:
     assert isinstance(exc, AuthGradeInsufficientError)
 
 
+def test_classify_permission_denied_by_code_only() -> None:
+    """``code='pubcPermission'`` 만 와도 분류. msg 빈 케이스 대응.
+
+    검증일 2026-05-11: 비회원 세션으로 TEWE 화면 (``UWEICZAA92`` 본 소득내역
+    보고서) 호출 시 ``msg`` 가 빈 채 ``code=pubcPermission`` 만 옴. 종전엔
+    msg 키워드 매칭 안 되어 ``SessionExpiredError`` default 로 떨어졌다.
+    """
+    rm = {"result": "F", "code": "pubcPermission"}
+    exc = classify_failure(rm, action_id="AWEICAAA034R01")
+    assert isinstance(exc, PermissionDeniedError)
+    assert not isinstance(exc, SessionExpiredError)
+    assert exc.action_id == "AWEICAAA034R01"
+
+
 def test_classify_permission_denied_for_unauthorized_screen() -> None:
     """비회원 세션이 회원 전용 메뉴 호출 시 받는 메시지.
 

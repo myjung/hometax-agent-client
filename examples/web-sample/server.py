@@ -1,7 +1,6 @@
 """Minimal web UI example for hometax-agent-client.
 
-옛 ``hometax-tools/examples/agitx_web_server.py`` (~3,000 줄, 사무실 운영용)
-를 **한 화면 / 한 폼 / 한 호출** 로 압축한 데모. 라이브러리 사용 방법을 보여
+**한 화면 / 한 폼 / 한 호출** 로 압축한 데모. 라이브러리 사용 방법을 보여
 주기 위한 예시이며, 일괄 조회 / 매니페스트 / 디스크 저장 / PDF 렌더링 같은
 운영 기능은 의도적으로 제외했다.
 

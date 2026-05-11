@@ -1,7 +1,8 @@
-"""OACX 간편인증 공통 흐름.
+"""OACX 간편인증 공통 흐름 — 회원 / 비회원.
 
 캡처 + 옛 hometax-scraper(2021) 의 ``user.py`` 흐름 분석에서 재구성::
 
+    [0]. (비회원만) /oacx/index.jsp 에 이름+RRN POST → server-side 등록
     1. trans       : POST /oacx/api/v1.0/trans            → JWT(token) + txId
     2. provider    : GET  /oacx/api/v1.0/provider/list    (검증용)
     3. NetFunnel   : GET  apct.hometax.go.kr/ts.wseq?aid=…
@@ -11,9 +12,10 @@
     5. authen-res  : POST /oacx/api/v1.0/authen/result    (폴링)
                                                   → cert_token (signedData)
     6. pubcLogin   : POST /pubcLogin.do?domain=…  → 홈택스 세션 쿠키 SET
+       (비회원이면 ``nMemberLoginYn / txprNm / ssn1 / ssn2`` 추가)
 
 각 provider 는 ``PROVIDER_ID`` / ``PROVIDER`` / ``NETFUNNEL_AID`` 만 다르고
-흐름은 동일하다.
+흐름은 동일하다. ``ssn`` 인자 유무로 회원/비회원 모드 분기.
 """
 
 from __future__ import annotations
@@ -102,6 +104,7 @@ class OACXAuth:
         name: str,
         phone: str,
         birthday: str,
+        ssn: str | None = None,
         impersonate: str = "chrome",
     ) -> None:
         """
@@ -109,6 +112,16 @@ class OACXAuth:
             name: 실명 (한글 가능).
             phone: 휴대폰번호. ``010-1234-5678`` / ``01012345678`` 둘 다 OK.
             birthday: 생년월일 8자리 ``YYYYMMDD``.
+            ssn: 주민등록번호 13자리 (``-`` 무관). 주어지면 **비회원 모드** —
+                ``initiate()`` 직전에 ``/oacx/index.jsp`` 에 이름+RRN POST
+                하여 server-side 에 비회원 식별자 등록 + ``pubcLogin`` body
+                에 ``nMemberLoginYn=Y / txprNm / ssn1 / ssn2`` 추가. ``None``
+                이면 회원 모드 (기본).
+
+                근거: ``UTXPPABA01.js`` ``fn_prcsLoginSimpleCallBack`` 의
+                ``if (scwin.nrgtMmbrSpmcCertYn)`` 분기 + ``UTECMADA02.js``
+                ``scwin.nts_start`` 의 ``/oacx/index.jsp`` form submit.
+                ``docs/hometax-facts.md`` §16 참조.
         """
         if not (self.PROVIDER_ID and self.PROVIDER and self.NETFUNNEL_AID):
             raise OACXAuthError(
@@ -120,6 +133,17 @@ class OACXAuth:
         self.phone1 = digits[:3]
         self.phone2 = digits[3:]
         self.birthday = birthday
+        if ssn is not None:
+            ssn_digits = re.sub(r"\D", "", ssn)
+            if len(ssn_digits) != 13:
+                raise OACXAuthError(
+                    f"ssn 은 13자리 숫자여야 함 (got {len(ssn_digits)}자리)"
+                )
+            self._ssn1 = ssn_digits[:6]
+            self._ssn2 = ssn_digits[6:]
+        else:
+            self._ssn1 = None
+            self._ssn2 = None
         from curl_cffi import requests as cf
         self.session: Any = cf.Session(impersonate=impersonate)
         self._tx_id: str | None = None
@@ -127,18 +151,30 @@ class OACXAuth:
         self._cx_id: str | None = None
         self._cert_token: str | None = None
 
+    @property
+    def is_guest(self) -> bool:
+        """비회원 모드 여부 (``ssn`` 인자로 결정)."""
+        return self._ssn1 is not None
+
     # ------------------------------------------------------------------ #
     # 흐름                                                                #
     # ------------------------------------------------------------------ #
 
     def initiate(self) -> tuple[str, str]:
-        """1단계: ``trans`` → JWT + ``txId``."""
-        try:
-            self.session.get(
-                f"{self.BASE_URL}/oacx/index.jsp", timeout=15,
-            )
-        except Exception:
-            pass
+        """1단계: ``trans`` → JWT + ``txId``.
+
+        비회원 모드 (``ssn`` 주어짐) 면 ``trans`` 직전에 ``/oacx/index.jsp``
+        에 이름+RRN form POST 하여 server-side 에 비회원 식별자 등록.
+        """
+        if self.is_guest:
+            self._register_guest_identity()
+        else:
+            try:
+                self.session.get(
+                    f"{self.BASE_URL}/oacx/index.jsp", timeout=15,
+                )
+            except Exception:
+                pass
 
         response = _post_with_tls_retry(
             self.session,
@@ -304,22 +340,33 @@ class OACXAuth:
         )
 
     def login_to_hometax(self) -> dict[str, str]:
-        """6단계: ``pubcLogin.do`` — 인증 토큰을 홈택스 세션 쿠키로 변환."""
+        """6단계: ``pubcLogin.do`` — 인증 토큰을 홈택스 세션 쿠키로 변환.
+
+        비회원 모드면 회원 form 에 ``nMemberLoginYn=Y / txprNm / ssn1 / ssn2``
+        를 추가한다 (``UTXPPABA01.js`` ``fn_prcsLoginSimpleCallBack`` 의
+        ``scwin.nrgtMmbrSpmcCertYn`` 분기와 1:1 매핑).
+        """
         if not self._cert_token:
             raise OACXAuthError("poll_result() 가 먼저 성공해야 함")
 
         self._prime_hometax_login_context()
 
-        data = {
-            "moisCertYn": "Y",
-            "newGpinYn": "Y",
-            "reqTxId": self._cert_token,
-            "ssoStatus": "",
-            "portalStatus": "",
-            "scrnId": "UTXPPABA01",
-            "userScrnRslnXcCnt": "1920",
-            "userScrnRslnYcCnt": "1080",
-        }
+        data: dict[str, str] = {}
+        if self.is_guest:
+            assert self._ssn1 is not None and self._ssn2 is not None
+            data["nMemberLoginYn"] = "Y"
+            # JS 는 txprNm 만 raw, ssn1/ssn2 만 base64. 일관성 없어도 그대로 흉내.
+            data["txprNm"] = self.name
+            data["ssn1"] = _b64(self._ssn1)
+            data["ssn2"] = _b64(self._ssn2)
+        data["moisCertYn"] = "Y"
+        data["newGpinYn"] = "Y"
+        data["reqTxId"] = self._cert_token
+        data["ssoStatus"] = ""
+        data["portalStatus"] = ""
+        data["scrnId"] = "UTXPPABA01"
+        data["userScrnRslnXcCnt"] = "1920"
+        data["userScrnRslnYcCnt"] = "1080"
         response = self.session.post(
             f"{self.BASE_URL}/pubcLogin.do?domain=hometax.go.kr&mainSys=Y",
             data=data,
@@ -339,6 +386,46 @@ class OACXAuth:
                 f"pubcLogin 거부됨: {msg or text[:300]!r}"
             )
         return {c.name: c.value for c in self.session.cookies.jar}
+
+    def _register_guest_identity(self) -> None:
+        """비회원 OACX 진입 단계 — ``/oacx/index.jsp`` 에 이름+RRN POST.
+
+        ``UTECMADA02.js`` ``scwin.nts_start`` 의 form submit (``ssn``,
+        ``userName``) 흉내. server-side 가 이 ssn/userName 을 다음 ``trans``
+        로 생성될 txId 에 묶어 둔다 (이후 ``authen/request`` body 의
+        ``ssn1/ssn2`` 가 빈 채로 가도 동작).
+
+        값은 두 키 모두 base64 인코딩. ``userName`` 은 한글 UTF-8 base64.
+        """
+        assert self._ssn1 is not None and self._ssn2 is not None
+        ssn_raw = self._ssn1 + self._ssn2  # 13자리 평문
+        body = {
+            "popupType": "layer",
+            "userType": "R",
+            "ssn": _b64(ssn_raw),
+            "userName": _b64(self.name),
+        }
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;"
+                      "q=0.9,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": self.BASE_URL,
+            "Referer": self.LOGIN_PAGE_URL,
+            "User-Agent": "Mozilla/5.0",
+        }
+        try:
+            _post_with_tls_retry(
+                self.session,
+                f"{self.BASE_URL}/oacx/index.jsp",
+                data=body,
+                headers=headers,
+                timeout=20,
+            )
+        except Exception as exc:
+            raise OACXAuthError(
+                f"비회원 식별자 등록 실패 (/oacx/index.jsp): {exc}"
+            ) from exc
 
     def _prime_hometax_login_context(self) -> None:
         """실제 로그인 화면이 ``pubcLogin`` 전에 만드는 TXPP 컨텍스트를 준비."""

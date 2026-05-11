@@ -250,7 +250,11 @@ def classify_failure(
         "권한이 없는 화면",
         "권한이 없는 메뉴",
     )
-    if any(keyword in msg for keyword in permission_keywords):
+    permission_codes = ("pubcPermission",)
+    if (
+        any(keyword in msg for keyword in permission_keywords)
+        or code in permission_codes
+    ):
         return PermissionDeniedError(
             f"메뉴/화면 권한 없음: msg={msg!r} code={code!r}",
             action_id=action_id,

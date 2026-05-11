@@ -87,6 +87,25 @@ name = "daily_wage"
 action_id = "AWEICAAA028R07"
 
 # ------------------------------------------------------------------ #
+# ClipReport (PDF export)                                            #
+#                                                                      #
+# 신고도움 / 신고안내문 등의 미리보기 HTML 응답에 들어있는 ``reportkey`` 를 #
+# 추출 → ClipReport4/Clip.jsp 의 R03 (page count polling) + R09        #
+# (PDF export) 두 단계로 PDF bytes 발급. 라이브 검증 2026-05-11         #
+# (신고안내문 5페이지 200KB). 비회원 세션으로도 통과.                    #
+# ------------------------------------------------------------------ #
+
+[services.clipreport]
+host = "sesw"
+endpoint = "/serp/clipreport.do"
+clip_jsp_path = "/serp/ClipReport4/Clip.jsp"
+r03_clip_id = "R03"
+r09_clip_id = "R09"
+page_count_poll_max = 12
+page_count_poll_interval_sec = 0.8
+pdf_export_attempts = 5
+
+# ------------------------------------------------------------------ #
 # Address probe                                                      #
 # ------------------------------------------------------------------ #
 

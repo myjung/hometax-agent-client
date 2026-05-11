@@ -14,12 +14,15 @@
 | --- | --- |
 | `auth_idpw.py` | ID/PW 직접 로그인 흐름. 2026-05 `pubcLogin` 보호 스크립트 주의사항 포함 |
 | `auth_kakao.py` | 카카오 OACX 간편인증 → 세션 캐시 (1차 인증 표준 흐름) |
+| `auth_kakao_guest.py` | **비회원** 카카오 OACX — 이름+RRN 으로 비회원 세션 발급 |
 | `auth_naver.py` | 네이버 OACX (카카오와 갈리는 부분 stage 별 verbose 로깅) |
 | `basic_inquiry.py` | 기존 쿠키 (`from_cookies`) 로 기본 조회 |
 | `income_tax_inquiry.py` | 종합소득세 신고도움 — 자료구분별 소득내역 / 신고안내문 / 보험료 |
+| `filing_help_pdf.py` | 종소세 신고안내문 공식 PDF 저장 (ClipReport R09, 데이터 없음 분기 포함) |
 | `recon_login.py` | Playwright 로 로그인 캡처 (`--resume` 으로 세션 재사용 둘러보기 가능) |
 | `recon_e2e_naver.py` | Naver 인증 → `export_storage_state` → CaptureSession resume → HAR 분석 한 흐름 (에이전트 주도) |
-| `web-sample/` | 옛 `hometax-tools` 의 3,000줄 웹 UI 를 한 화면 / 한 폼 / 한 호출로 압축한 demo |
+| `inspect_har.py` | HAR 분석 CLI — actionId 별 req/resp / 응답 키 검색 / 페이지 JS 의 schema 카탈로그 |
+| `web-sample/` | 한 화면 / 한 폼 / 한 호출 단순 웹 UI demo (라이브러리 호출 패턴 시연) |
 
 ## 가드레일 (새 demo 추가 시)
 
